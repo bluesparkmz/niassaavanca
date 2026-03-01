@@ -7,8 +7,8 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 
-from . import models
-from .database import get_db
+import models
+from database import get_db
 
 # Comentario: configure estas chaves em variaveis de ambiente em producao.
 SECRET_KEY = "change-me-in-production"

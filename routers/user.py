@@ -4,11 +4,11 @@ from uuid import uuid4
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status
 from sqlalchemy.orm import Session
 
-from .. import schemmas
-from ..auth import create_access_token, get_current_user
-from ..controllers import user as user_controller
-from ..database import get_db
-from .. import models
+import schemmas
+import models
+from auth import create_access_token, get_current_user
+from controllers import user as user_controller
+from database import get_db
 
 router = APIRouter(prefix="/users", tags=["users"])
 

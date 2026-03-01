@@ -1,7 +1,8 @@
 from sqlalchemy.orm import Session
 
-from .. import models, schemmas
-from ..auth import get_password_hash, verify_password
+import models
+import schemmas
+from auth import get_password_hash, verify_password
 
 
 def create_user(db: Session, user_in: schemmas.UserCreate) -> models.User:

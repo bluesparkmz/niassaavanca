@@ -3,11 +3,12 @@ import json
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from sqlalchemy.orm import Session
 
-from .. import schemmas, models
-from ..auth import get_user_from_token
-from ..controllers.conection_manager import ConnectionManager
-from ..controllers import message as message_controller
-from ..database import SessionLocal
+import schemmas
+import models
+from auth import get_user_from_token
+from controllers.conection_manager import ConnectionManager
+from controllers import message as message_controller
+from database import SessionLocal
 
 router = APIRouter(prefix="/ws", tags=["websocket"])
 manager = ConnectionManager()
