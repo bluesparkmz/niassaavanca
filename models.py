@@ -27,6 +27,7 @@ class User(Base):
     )
     groups_owned = relationship("Group", back_populates="owner")
     group_memberships = relationship("GroupMember", back_populates="user")
+    message_reads = relationship("MessageRead", back_populates="user")
 
 
 class Group(Base):
@@ -70,3 +71,17 @@ class Message(Base):
     sender = relationship("User", foreign_keys=[sender_id], back_populates="sent_messages")
     receiver = relationship("User", foreign_keys=[receiver_id], back_populates="received_messages")
     group = relationship("Group", back_populates="messages")
+    reads = relationship("MessageRead", back_populates="message")
+
+
+class MessageRead(Base):
+    __tablename__ = "message_reads"
+    __table_args__ = (UniqueConstraint("message_id", "user_id", name="uq_message_user"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    message_id = Column(Integer, ForeignKey("messages.id"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    read_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    message = relationship("Message", back_populates="reads")
+    user = relationship("User", back_populates="message_reads")

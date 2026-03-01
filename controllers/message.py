@@ -104,3 +104,21 @@ def update_message(
 def delete_message(db: Session, message: models.Message) -> None:
     db.delete(message)
     db.commit()
+
+
+def mark_messages_read(db: Session, message_ids: list[int], user_id: int) -> int:
+    # Comentario: cria marcacoes de leitura ignorando as que ja existem.
+    created = 0
+    for message_id in message_ids:
+        exists = (
+            db.query(models.MessageRead)
+            .filter(models.MessageRead.message_id == message_id, models.MessageRead.user_id == user_id)
+            .first()
+        )
+        if exists:
+            continue
+        db.add(models.MessageRead(message_id=message_id, user_id=user_id))
+        created += 1
+    if created:
+        db.commit()
+    return created

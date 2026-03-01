@@ -99,3 +99,20 @@ class WebSocketPayload(BaseModel):
     # Comentario: campos para sinalizacao WebRTC.
     sdp: Optional[dict] = None
     candidate: Optional[dict] = None
+
+
+class ChatSummary(BaseModel):
+    chat_type: str
+    chat_id: int
+    name: Optional[str] = None
+    avatar: Optional[str] = None
+    last_message: Optional[str] = None
+    last_message_at: Optional[datetime] = None
+    last_message_id: Optional[int] = None
+    last_message_sender_id: Optional[int] = None
+    unread_count: int = 0
+
+
+class ChatReadRequest(BaseModel):
+    chat_type: str
+    chat_id: int
