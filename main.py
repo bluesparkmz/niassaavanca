@@ -2,9 +2,11 @@ import sys
 from pathlib import Path
 
 from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+import os
 
 # Comentario: estilo SkyVenda sem pacote.
 app_dir = Path(__file__).resolve().parent
@@ -19,6 +21,19 @@ from routers.websoket_router import router as websoket_router  # noqa: E402
 
 app = FastAPI(title="MeuChat")
 templates = Jinja2Templates(directory=str(app_dir / "templates"))
+
+cors_origins = os.getenv(
+    "CORS_ORIGINS",
+    "https://meuchat-mz.vercel.app,http://localhost:8080,http://127.0.0.1:8080,http://localhost:5173,http://127.0.0.1:5173",
+)
+allow_origins = [origin.strip() for origin in cors_origins.split(",") if origin.strip()]
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=allow_origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Comentario: servir uploads para avatars.
 uploads_dir = app_dir / "uploads"
