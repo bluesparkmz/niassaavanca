@@ -18,7 +18,7 @@ from routers.messages import router as messages_router  # noqa: E402
 from routers.websoket_router import router as websoket_router  # noqa: E402
 
 app = FastAPI(title="MeuChat")
-templates = Jinja2Templates(directory=str(app_dir.parent / "templates"))
+templates = Jinja2Templates(directory=str(app_dir / "templates"))
 
 # Comentario: servir uploads para avatars.
 uploads_dir = app_dir / "uploads"
