@@ -23,7 +23,10 @@ class ConnectionManager:
     async def connect(self, connection: Connection) -> None:
         await connection.websocket.accept()
         user_id = str(connection.id)
+        first = user_id not in self.active_connections
         self.active_connections.setdefault(user_id, []).append(connection)
+        if first:
+            await self.broadcast_user_status(user_id, "online")
 
     async def disconnect(self, user_id: int, websocket: WebSocket | None = None) -> None:
         user_key = str(user_id)
@@ -38,6 +41,7 @@ class ConnectionManager:
             self.active_connections[user_key] = conns
         else:
             self.active_connections.pop(user_key, None)
+            await self.broadcast_user_status(user_key, "offline")
 
         for group_id in list(self.group_connections.keys()):
             self.group_connections[group_id].discard(user_key)
@@ -91,6 +95,16 @@ class ConnectionManager:
                 }
             )
         return users
+
+    async def broadcast_user_status(self, user_id: str, status: str) -> None:
+        # Comentario: notifica todos os usuarios conectados.
+        payload = {"type": "user_status", "data": {"user_id": user_id, "status": status}}
+        for conns in self.active_connections.values():
+            for conn in conns:
+                try:
+                    await conn.websocket.send_json(payload)
+                except Exception:
+                    pass
 
     async def create_video_call(self, from_user: int, to_user: int) -> str | None:
         import uuid
