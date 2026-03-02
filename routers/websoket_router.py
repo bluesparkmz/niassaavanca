@@ -65,6 +65,10 @@ async def chat_socket(websocket: WebSocket):
         for membership in user.group_memberships:
             global_connection_manager.join_group(user.id, membership.group_id)
 
+        # Comentario: envia snapshot inicial de usuarios online para o cliente.
+        online_user_ids = [online_user["id"] for online_user in global_connection_manager.get_online_users()]
+        await websocket.send_json({"type": "online_users", "data": {"user_ids": online_user_ids}})
+
         heartbeat_task = asyncio.create_task(_heartbeat_loop(websocket))
 
         while True:
