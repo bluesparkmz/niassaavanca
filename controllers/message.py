@@ -105,6 +105,8 @@ def update_message(
 
 
 def delete_message(db: Session, message: models.Message) -> None:
+    # Comentario: remove leituras vinculadas antes da mensagem para evitar NOT NULL em message_reads.message_id.
+    db.query(models.MessageRead).filter(models.MessageRead.message_id == message.id).delete(synchronize_session=False)
     db.delete(message)
     db.commit()
 
