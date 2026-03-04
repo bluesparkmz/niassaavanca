@@ -44,6 +44,10 @@ class LoginRequest(BaseModel):
     password: str
 
 
+class GoogleLoginRequest(BaseModel):
+    id_token: str
+
+
 class MessageCreate(BaseModel):
     content: Optional[str] = None
     receiver_id: Optional[int] = None

@@ -10,7 +10,8 @@ EXPO_PUSH_ENDPOINT = "https://exp.host/--/api/v2/push/send"
 def is_expo_push_token(token: str | None) -> bool:
     if not token:
         return False
-    return token.startswith("ExponentPushToken[") or token.startswith("ExpoPushToken[")
+    # Comentario: aceita apenas token de app standalone (bloqueia Expo Go).
+    return token.startswith("ExpoPushToken[")
 
 
 def send_expo_push(

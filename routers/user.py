@@ -1,8 +1,10 @@
 from datetime import datetime
+import os
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
+import requests
 
 import schemmas
 import models
@@ -13,6 +15,45 @@ from controllers.storage_manager import storage_manager, AVATARS_FOLDER
 from database import get_db
 
 router = APIRouter(prefix="/users", tags=["users"])
+
+GOOGLE_TOKENINFO_URL = "https://oauth2.googleapis.com/tokeninfo"
+GOOGLE_DEFAULT_CLIENT_ID = "690521786732-6rh6blrhbu1ndqrpc2513mlv3mvrdacg.apps.googleusercontent.com"
+
+
+def _verify_google_id_token(id_token: str) -> dict:
+    try:
+        response = requests.get(
+            GOOGLE_TOKENINFO_URL,
+            params={"id_token": id_token},
+            timeout=10,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail="Falha ao validar token Google") from exc
+
+    if response.status_code >= 400:
+        raise HTTPException(status_code=401, detail="Token Google invalido")
+
+    payload = response.json()
+    sub = payload.get("sub")
+    aud = payload.get("aud")
+    exp = payload.get("exp")
+    if not sub or not aud or not exp:
+        raise HTTPException(status_code=401, detail="Token Google invalido")
+
+    allowed = os.getenv("GOOGLE_CLIENT_IDS", GOOGLE_DEFAULT_CLIENT_ID)
+    allowed_client_ids = {item.strip() for item in allowed.split(",") if item.strip()}
+    if aud not in allowed_client_ids:
+        raise HTTPException(status_code=401, detail="Cliente Google nao autorizado")
+
+    try:
+        expires_at = int(exp)
+    except Exception:
+        raise HTTPException(status_code=401, detail="Token Google expirado")
+
+    if expires_at <= int(datetime.utcnow().timestamp()):
+        raise HTTPException(status_code=401, detail="Token Google expirado")
+
+    return payload
 
 
 @router.post("/register", response_model=schemmas.UserOut, status_code=status.HTTP_201_CREATED)
@@ -79,6 +120,39 @@ def login_json(payload: schemmas.LoginRequest, db: Session = Depends(get_db)):
     user = user_controller.authenticate_user(db, payload.username, payload.password)
     if not user:
         raise HTTPException(status_code=401, detail="Credenciais invalidas")
+    token = create_access_token({"sub": user.id})
+    return schemmas.Token(access_token=token)
+
+
+@router.post("/login-google", response_model=schemmas.Token)
+def login_google(payload: schemmas.GoogleLoginRequest, db: Session = Depends(get_db)):
+    claims = _verify_google_id_token(payload.id_token)
+    google_sub = str(claims["sub"])
+    username = f"google_{google_sub}"[:50]
+    user = db.query(models.User).filter(models.User.username == username).first()
+
+    if not user:
+        user = models.User(
+            name=(claims.get("name") or claims.get("email") or "Google User")[:120],
+            avatar=claims.get("picture"),
+            username=username,
+            password_hash=user_controller.get_password_hash(f"google_{google_sub}_{datetime.utcnow().timestamp()}"),
+        )
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+    else:
+        changed = False
+        if not user.avatar and claims.get("picture"):
+            user.avatar = claims.get("picture")
+            changed = True
+        if claims.get("name") and user.name != claims.get("name"):
+            user.name = str(claims["name"])[:120]
+            changed = True
+        if changed:
+            db.commit()
+            db.refresh(user)
+
     token = create_access_token({"sub": user.id})
     return schemmas.Token(access_token=token)
 

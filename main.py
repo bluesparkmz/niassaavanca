@@ -1,10 +1,8 @@
 import sys
 from pathlib import Path
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse
-from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 import os
 
@@ -38,17 +36,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Comentario: servir uploads para avatars.
-uploads_dir = app_dir / "uploads"
-uploads_dir.mkdir(parents=True, exist_ok=True)
-app.mount("/uploads", StaticFiles(directory=str(uploads_dir)), name="uploads")
-
 app.include_router(user_router)
 app.include_router(messages_router)
 app.include_router(websoket_router)
 
-
-@app.get("/demo", response_class=HTMLResponse)
-def demo_ui(request: Request):
-    # Comentario: UI simples para demo no navegador.
-    return templates.TemplateResponse("demo.html", {"request": request})
