@@ -17,6 +17,7 @@ class User(Base):
     sex = Column(String(20), nullable=True)
     birth_date = Column(Date, nullable=True)
     password_hash = Column(String(255), nullable=False)
+    expo_push_token = Column(String(255), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
     sent_messages = relationship("Message", foreign_keys="Message.sender_id", back_populates="sender")

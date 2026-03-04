@@ -62,6 +62,9 @@ class ConnectionManager:
         for conn in self.active_connections.get(user_key, []):
             await conn.websocket.send_json(message)
 
+    def is_user_online(self, user_id: int) -> bool:
+        return str(user_id) in self.active_connections and len(self.active_connections[str(user_id)]) > 0
+
     async def send_group(self, group_id: int, message: dict) -> None:
         for member_id in self.group_connections.get(group_id, set()):
             for conn in self.active_connections.get(member_id, []):

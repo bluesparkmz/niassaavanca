@@ -52,11 +52,14 @@ Base.metadata.create_all(bind=engine)
 # Comentario: patch leve de schema para ambientes existentes.
 inspector = inspect(engine)
 message_columns = {column["name"] for column in inspector.get_columns("messages")}
+user_columns = {column["name"] for column in inspector.get_columns("users")}
 with engine.begin() as conn:
     if "media_url" not in message_columns:
         conn.execute(text("ALTER TABLE messages ADD COLUMN media_url VARCHAR(255)"))
     if "media_type" not in message_columns:
         conn.execute(text("ALTER TABLE messages ADD COLUMN media_type VARCHAR(30)"))
+    if "expo_push_token" not in user_columns:
+        conn.execute(text("ALTER TABLE users ADD COLUMN expo_push_token VARCHAR(255)"))
 
 app.include_router(user_router)
 app.include_router(messages_router)

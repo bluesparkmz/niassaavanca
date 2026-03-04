@@ -88,6 +88,18 @@ def get_me(current_user: models.User = Depends(get_current_user)):
     return current_user
 
 
+@router.post("/me/push-token", response_model=schemmas.UserOut)
+def set_push_token(
+    payload: schemmas.PushTokenIn,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    current_user.expo_push_token = payload.token or None
+    db.commit()
+    db.refresh(current_user)
+    return current_user
+
+
 @router.put("/me", response_model=schemmas.UserOut)
 def update_me(
     user_in: schemmas.UserUpdate,

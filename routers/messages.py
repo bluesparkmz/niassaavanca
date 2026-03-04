@@ -7,6 +7,7 @@ import models
 from auth import get_current_user
 from controllers import message as message_controller
 from controllers.conection_manager import global_connection_manager
+from controllers.push_notifications import send_expo_push, is_expo_push_token
 from controllers.storage_manager import storage_manager, MESSAGES_FOLDER
 from database import get_db
 
@@ -35,6 +36,57 @@ async def _broadcast_message(message: models.Message) -> None:
         await global_connection_manager.send_personal(message.sender_id, response)
 
 
+def _build_push_preview(message: models.Message) -> str:
+    if (message.content or "").strip():
+        preview = message.content.strip()
+        return preview[:120]
+    if message.media_type == "image":
+        return "Enviou uma imagem."
+    if message.media_type == "audio":
+        return "Enviou um audio."
+    return "Nova mensagem."
+
+
+def _send_push_notifications(db: Session, message: models.Message) -> None:
+    sender = db.query(models.User).filter(models.User.id == message.sender_id).first()
+    sender_name = sender.name if sender else "Novo contato"
+    body = _build_push_preview(message)
+
+    if message.receiver_id:
+        receiver = db.query(models.User).filter(models.User.id == message.receiver_id).first()
+        if (
+            receiver
+            and is_expo_push_token(receiver.expo_push_token)
+            and not global_connection_manager.is_user_online(receiver.id)
+        ):
+            send_expo_push(
+                to_token=receiver.expo_push_token,  # type: ignore[arg-type]
+                title=sender_name,
+                body=body,
+                data={"chat_type": "direct", "chat_id": message.sender_id},
+            )
+        return
+
+    if message.group_id:
+        memberships = (
+            db.query(models.GroupMember)
+            .filter(models.GroupMember.group_id == message.group_id, models.GroupMember.user_id != message.sender_id)
+            .all()
+        )
+        for membership in memberships:
+            user = db.query(models.User).filter(models.User.id == membership.user_id).first()
+            if not user or not is_expo_push_token(user.expo_push_token):
+                continue
+            if global_connection_manager.is_user_online(user.id):
+                continue
+            send_expo_push(
+                to_token=user.expo_push_token,  # type: ignore[arg-type]
+                title=sender_name,
+                body=body,
+                data={"chat_type": "group", "chat_id": message.group_id},
+            )
+
+
 @router.post("/", response_model=schemmas.MessageOut, status_code=status.HTTP_201_CREATED)
 async def send_message(
     message_in: schemmas.MessageCreate,
@@ -48,6 +100,7 @@ async def send_message(
 
     message = message_controller.create_message(db, current_user.id, message_in)
     await _broadcast_message(message)
+    _send_push_notifications(db, message)
     return message
 
 
@@ -88,6 +141,7 @@ async def upload_message_media(
     )
     message = message_controller.create_message(db, current_user.id, message_in)
     await _broadcast_message(message)
+    _send_push_notifications(db, message)
     return message
 
 

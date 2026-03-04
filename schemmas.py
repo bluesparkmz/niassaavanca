@@ -27,6 +27,7 @@ class UserUpdate(BaseModel):
 
 class UserOut(UserBase):
     id: int
+    expo_push_token: Optional[str] = None
     created_at: datetime
 
     class Config:
@@ -132,3 +133,7 @@ class OTPVerify(BaseModel):
     phone: str
     code: str
     new_password: str = Field(min_length=4)
+
+
+class PushTokenIn(BaseModel):
+    token: Optional[str] = None
