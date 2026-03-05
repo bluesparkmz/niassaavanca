@@ -1,5 +1,6 @@
 from datetime import datetime
 import os
+import logging
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, status
 from fastapi.security import OAuth2PasswordRequestForm
@@ -13,6 +14,8 @@ from controllers import user as user_controller
 from controllers import whatsapp as whatsapp_controller
 from controllers.storage_manager import storage_manager, AVATARS_FOLDER
 from database import get_db
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -28,21 +31,29 @@ def _verify_google_id_token(id_token: str) -> dict:
             timeout=10,
         )
     except Exception as exc:
+        logger.error(f"Erro ao validar token Google: {exc}")
         raise HTTPException(status_code=502, detail="Falha ao validar token Google") from exc
 
     if response.status_code >= 400:
+        logger.error(f"Google tokeninfo retornou: {response.status_code} - {response.text}")
         raise HTTPException(status_code=401, detail="Token Google invalido")
 
     payload = response.json()
+    logger.info(f"Google token payload: {payload}")
+    
     sub = payload.get("sub")
     aud = payload.get("aud")
     exp = payload.get("exp")
     if not sub or not aud or not exp:
+        logger.error(f"Token incompleto: sub={sub}, aud={aud}, exp={exp}")
         raise HTTPException(status_code=401, detail="Token Google invalido")
 
     allowed = os.getenv("GOOGLE_CLIENT_IDS", GOOGLE_DEFAULT_CLIENT_ID)
     allowed_client_ids = {item.strip() for item in allowed.split(",") if item.strip()}
+    logger.info(f"aud do token: {aud}, allowed_client_ids: {allowed_client_ids}")
+    
     if aud not in allowed_client_ids:
+        logger.error(f"Client ID não autorizado: {aud}")
         raise HTTPException(status_code=401, detail="Cliente Google nao autorizado")
 
     try:
