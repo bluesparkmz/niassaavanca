@@ -35,6 +35,13 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
 
+def init_db() -> None:
+    # Comentario: garante schema minimo quando o banco sobe vazio.
+    import models  # noqa: F401
+
+    Base.metadata.create_all(bind=engine)
+
+
 def get_db():
     # Comentario: dependency do FastAPI para abrir/fechar sessoes do banco.
     db = SessionLocal()
