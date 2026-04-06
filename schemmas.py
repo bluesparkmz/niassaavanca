@@ -203,3 +203,25 @@ class PostCommentOut(BaseModel):
 class PostLikeToggleOut(BaseModel):
     liked: bool
     likes_count: int
+
+
+class AIChatMessage(BaseModel):
+    role: Literal["user", "assistant"] = "user"
+    content: str = Field(min_length=1, max_length=8000)
+
+
+class AIChatRequest(BaseModel):
+    message: str = Field(min_length=1, max_length=8000)
+    history: list[AIChatMessage] = Field(default_factory=list)
+
+
+class AIChatResponse(BaseModel):
+    reply: str
+    model: str
+
+
+class AIRealtimeClientEvent(BaseModel):
+    type: Literal["prompt", "audio", "image", "end_turn", "ping"]
+    text: Optional[str] = None
+    data: Optional[str] = None
+    mime_type: Optional[str] = None

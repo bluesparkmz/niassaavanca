@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -17,13 +18,17 @@ def _ensure_admin(current_user: models.User) -> None:
         raise HTTPException(status_code=403, detail="Apenas admin pode publicar")
 
 
-def _build_post_out(post: models.Post, current_user_id: int, db: Session) -> schemmas.PostOut:
-    likes_count = (
+def _count_post_likes(db: Session, post_id: int) -> int:
+    return (
         db.query(func.count(models.PostLike.id))
-        .filter(models.PostLike.post_id == post.id)
+        .filter(models.PostLike.post_id == post_id)
         .scalar()
         or 0
     )
+
+
+def _build_post_out(post: models.Post, current_user_id: int, db: Session) -> schemmas.PostOut:
+    likes_count = _count_post_likes(db, post.id)
     comments_count = (
         db.query(func.count(models.PostComment.id))
         .filter(models.PostComment.post_id == post.id)
@@ -178,16 +183,29 @@ def toggle_like(
         liked = False
     else:
         db.add(models.PostLike(post_id=post_id, user_id=current_user.id))
-        liked = True
+        try:
+            db.commit()
+            liked = True
+        except IntegrityError:
+            db.rollback()
+            liked = (
+                db.query(models.PostLike.id)
+                .filter(
+                    models.PostLike.post_id == post_id,
+                    models.PostLike.user_id == current_user.id,
+                )
+                .first()
+                is not None
+            )
+            return schemmas.PostLikeToggleOut(
+                liked=liked,
+                likes_count=_count_post_likes(db, post_id),
+            )
 
-    db.commit()
+    if like:
+        db.commit()
 
-    likes_count = (
-        db.query(func.count(models.PostLike.id))
-        .filter(models.PostLike.post_id == post_id)
-        .scalar()
-        or 0
-    )
+    likes_count = _count_post_likes(db, post_id)
     return schemmas.PostLikeToggleOut(liked=liked, likes_count=likes_count)
 
 
@@ -245,10 +263,14 @@ def create_comment(
     if not post:
         raise HTTPException(status_code=404, detail="Post nao encontrado")
 
+    content = payload.content.strip()
+    if not content:
+        raise HTTPException(status_code=400, detail="Comentario vazio")
+
     comment = models.PostComment(
         post_id=post_id,
         user_id=current_user.id,
-        content=payload.content.strip(),
+        content=content,
     )
     db.add(comment)
     db.commit()

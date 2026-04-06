@@ -16,6 +16,7 @@ if str(app_dir) not in sys.path:
 
 from routers.user import router as user_router  # noqa: E402
 from routers.posts import router as posts_router  # noqa: E402
+from routers.ai import router as ai_router  # noqa: E402
 from database import init_db  # noqa: E402
 
 app = FastAPI(title="MeuChat")
@@ -42,6 +43,7 @@ app.add_middleware(
 
 app.include_router(user_router)
 app.include_router(posts_router)
+app.include_router(ai_router)
 
 
 @app.exception_handler(Exception)
