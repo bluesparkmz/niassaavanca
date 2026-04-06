@@ -152,7 +152,8 @@ TopicLiteral = Literal["natureza", "agricultura", "turismo"]
 class PostCreate(BaseModel):
     title: str = Field(min_length=3, max_length=180)
     content: str = Field(min_length=3)
-    topic: TopicLiteral
+    topic: Optional[TopicLiteral] = None
+    category: Optional[TopicLiteral] = None
     image_url: Optional[str] = None
 
 
@@ -160,6 +161,7 @@ class PostUpdate(BaseModel):
     title: Optional[str] = Field(default=None, min_length=3, max_length=180)
     content: Optional[str] = Field(default=None, min_length=3)
     topic: Optional[TopicLiteral] = None
+    category: Optional[TopicLiteral] = None
     image_url: Optional[str] = None
 
 
@@ -178,6 +180,7 @@ class PostOut(BaseModel):
     title: str
     content: str
     topic: TopicLiteral
+    category: TopicLiteral
     image_url: Optional[str] = None
     created_at: datetime
     updated_at: datetime

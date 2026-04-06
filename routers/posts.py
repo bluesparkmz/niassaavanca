@@ -50,6 +50,7 @@ def _build_post_out(post: models.Post, current_user_id: int, db: Session) -> sch
         title=post.title,
         content=post.content,
         topic=post.topic,
+        category=post.topic,
         image_url=post.image_url,
         created_at=post.created_at,
         updated_at=post.updated_at,
@@ -100,13 +101,17 @@ def create_post(
 ):
     _ensure_admin(current_user)
 
-    if payload.topic not in ALLOWED_TOPICS:
+    category = payload.category or payload.topic
+    if not category:
+        raise HTTPException(status_code=400, detail="Categoria e obrigatoria")
+
+    if category not in ALLOWED_TOPICS:
         raise HTTPException(status_code=400, detail="Tema invalido")
 
     post = models.Post(
         title=payload.title.strip(),
         content=payload.content.strip(),
-        topic=payload.topic,
+        topic=category,
         image_url=payload.image_url,
         author_id=current_user.id,
     )
@@ -132,10 +137,11 @@ def update_post(
         post.title = payload.title.strip()
     if payload.content is not None:
         post.content = payload.content.strip()
-    if payload.topic is not None:
-        if payload.topic not in ALLOWED_TOPICS:
+    next_category = payload.category if payload.category is not None else payload.topic
+    if next_category is not None:
+        if next_category not in ALLOWED_TOPICS:
             raise HTTPException(status_code=400, detail="Tema invalido")
-        post.topic = payload.topic
+        post.topic = next_category
     if payload.image_url is not None:
         post.image_url = payload.image_url
 
