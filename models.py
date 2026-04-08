@@ -66,6 +66,7 @@ class Post(Base):
     title = Column(String(180), nullable=False)
     content = Column(Text, nullable=False)
     topic = Column(String(20), nullable=False, index=True)
+    status = Column(String(20), nullable=False, default="draft", index=True)
     image_url = Column(String(255), nullable=True)
     author_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)

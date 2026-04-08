@@ -101,12 +101,41 @@ def _ensure_users_columns() -> None:
             )
 
 
+def _ensure_posts_columns() -> None:
+    inspector = inspect(engine)
+    if "posts" not in inspector.get_table_names():
+        return
+
+    post_columns = {col["name"] for col in inspector.get_columns("posts")}
+    statements: list[str] = []
+
+    def add_column(column_name: str, sqlite_sql: str, postgres_sql: str) -> None:
+        if column_name not in post_columns:
+            statements.append(sqlite_sql if is_sqlite else postgres_sql)
+
+    add_column(
+        "status",
+        "ALTER TABLE posts ADD COLUMN status VARCHAR(20) NOT NULL DEFAULT 'draft'",
+        "ALTER TABLE posts ADD COLUMN IF NOT EXISTS status VARCHAR(20) NOT NULL DEFAULT 'draft'",
+    )
+
+    with engine.begin() as connection:
+        for statement in statements:
+            connection.execute(text(statement))
+
+        if not is_sqlite:
+            connection.execute(
+                text("CREATE INDEX IF NOT EXISTS ix_posts_status ON posts (status)")
+            )
+
+
 def init_db() -> None:
     # Comentario: garante schema minimo quando o banco sobe vazio.
     import models  # noqa: F401
 
     Base.metadata.create_all(bind=engine)
     _ensure_users_columns()
+    _ensure_posts_columns()
 
 
 def get_db():

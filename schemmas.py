@@ -67,6 +67,7 @@ class PushTokenIn(BaseModel):
 
 
 TopicLiteral = Literal["natureza", "agricultura", "turismo"]
+PostStatusLiteral = Literal["draft", "published"]
 
 
 class PostCreate(BaseModel):
@@ -74,7 +75,7 @@ class PostCreate(BaseModel):
     content: str = Field(min_length=3)
     topic: Optional[TopicLiteral] = None
     category: Optional[TopicLiteral] = None
-    image_url: Optional[str] = None
+    status: PostStatusLiteral = "draft"
 
 
 class PostUpdate(BaseModel):
@@ -82,7 +83,7 @@ class PostUpdate(BaseModel):
     content: Optional[str] = Field(default=None, min_length=3)
     topic: Optional[TopicLiteral] = None
     category: Optional[TopicLiteral] = None
-    image_url: Optional[str] = None
+    status: Optional[PostStatusLiteral] = None
 
 
 class PostAuthor(BaseModel):
@@ -101,6 +102,7 @@ class PostOut(BaseModel):
     content: str
     topic: TopicLiteral
     category: TopicLiteral
+    status: PostStatusLiteral
     image_url: Optional[str] = None
     created_at: datetime
     updated_at: datetime

@@ -12,11 +12,33 @@ from controllers.storage_manager import POSTS_FOLDER, storage_manager
 router = APIRouter(prefix="/posts", tags=["posts"])
 
 ALLOWED_TOPICS = {"natureza", "agricultura", "turismo"}
+ALLOWED_STATUSES = {"draft", "published"}
 
 
 def _ensure_admin(current_user: models.User) -> None:
     if not current_user.is_admin:
         raise HTTPException(status_code=403, detail="Apenas admin pode publicar")
+
+
+def _can_access_post(post: models.Post, current_user: models.User) -> bool:
+    return post.status == "published" or current_user.is_admin or post.author_id == current_user.id
+
+
+def _ensure_post_visible(post: models.Post, current_user: models.User) -> None:
+    if not _can_access_post(post, current_user):
+        raise HTTPException(status_code=404, detail="Post nao encontrado")
+
+
+def _resolve_post_status(
+    requested_status: schemmas.PostStatusLiteral | None,
+    current_user: models.User,
+) -> str:
+    resolved_status = requested_status or "draft"
+    if resolved_status not in ALLOWED_STATUSES:
+        raise HTTPException(status_code=400, detail="Estado invalido")
+    if resolved_status == "published" and not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Apenas admin pode publicar")
+    return resolved_status
 
 
 def _count_post_likes(db: Session, post_id: int) -> int:
@@ -30,7 +52,6 @@ def _count_post_likes(db: Session, post_id: int) -> int:
 
 async def _resolve_post_image_url(
     image: UploadFile | None,
-    image_url: str | None,
 ) -> str | None:
     if image is not None:
         return await storage_manager.upload_file(
@@ -38,8 +59,7 @@ async def _resolve_post_image_url(
             POSTS_FOLDER,
             allowed_mime_prefixes=("image/",),
         )
-    cleaned_url = (image_url or "").strip()
-    return cleaned_url or None
+    return None
 
 
 def _build_post_out(post: models.Post, current_user_id: int, db: Session) -> schemmas.PostOut:
@@ -66,6 +86,7 @@ def _build_post_out(post: models.Post, current_user_id: int, db: Session) -> sch
         content=post.content,
         topic=post.topic,
         category=post.topic,
+        status=post.status,
         image_url=post.image_url,
         created_at=post.created_at,
         updated_at=post.updated_at,
@@ -89,7 +110,33 @@ def list_posts(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
-    query = db.query(models.Post).order_by(models.Post.created_at.desc())
+    query = (
+        db.query(models.Post)
+        .filter(models.Post.status == "published")
+        .order_by(models.Post.created_at.desc())
+    )
+    if topic:
+        query = query.filter(models.Post.topic == topic)
+    posts = query.offset(offset).limit(limit).all()
+    return [_build_post_out(post, current_user.id, db) for post in posts]
+
+
+@router.get("/me", response_model=list[schemmas.PostOut])
+def list_my_posts(
+    status: schemmas.PostStatusLiteral | None = Query(default=None),
+    topic: schemmas.TopicLiteral | None = Query(default=None),
+    limit: int = Query(default=20, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    query = (
+        db.query(models.Post)
+        .filter(models.Post.author_id == current_user.id)
+        .order_by(models.Post.created_at.desc())
+    )
+    if status:
+        query = query.filter(models.Post.status == status)
     if topic:
         query = query.filter(models.Post.topic == topic)
     posts = query.offset(offset).limit(limit).all()
@@ -105,6 +152,7 @@ def get_post(
     post = db.query(models.Post).filter(models.Post.id == post_id).first()
     if not post:
         raise HTTPException(status_code=404, detail="Post nao encontrado")
+    _ensure_post_visible(post, current_user)
     return _build_post_out(post, current_user.id, db)
 
 
@@ -114,13 +162,11 @@ async def create_post(
     content: str = Form(...),
     category: schemmas.TopicLiteral | None = Form(default=None),
     topic: schemmas.TopicLiteral | None = Form(default=None),
+    status: schemmas.PostStatusLiteral = Form(default="draft"),
     image: UploadFile | None = File(default=None),
-    image_url: str | None = Form(default=None),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
-    _ensure_admin(current_user)
-
     resolved_category = category or topic
     if not resolved_category:
         raise HTTPException(status_code=400, detail="Categoria e obrigatoria")
@@ -135,12 +181,14 @@ async def create_post(
     if len(clean_content) < 3:
         raise HTTPException(status_code=400, detail="Conteudo invalido")
 
-    resolved_image_url = await _resolve_post_image_url(image, image_url)
+    resolved_status = _resolve_post_status(status, current_user)
+    resolved_image_url = await _resolve_post_image_url(image)
 
     post = models.Post(
         title=clean_title,
         content=clean_content,
         topic=resolved_category,
+        status=resolved_status,
         image_url=resolved_image_url,
         author_id=current_user.id,
     )
@@ -157,15 +205,16 @@ async def update_post(
     content: str | None = Form(default=None),
     category: schemmas.TopicLiteral | None = Form(default=None),
     topic: schemmas.TopicLiteral | None = Form(default=None),
+    status: schemmas.PostStatusLiteral | None = Form(default=None),
     image: UploadFile | None = File(default=None),
-    image_url: str | None = Form(default=None),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
-    _ensure_admin(current_user)
     post = db.query(models.Post).filter(models.Post.id == post_id).first()
     if not post:
         raise HTTPException(status_code=404, detail="Post nao encontrado")
+    if not current_user.is_admin and post.author_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Sem permissao para editar post")
 
     if title is not None:
         clean_title = title.strip()
@@ -182,8 +231,10 @@ async def update_post(
         if next_category not in ALLOWED_TOPICS:
             raise HTTPException(status_code=400, detail="Tema invalido")
         post.topic = next_category
-    if image is not None or image_url is not None:
-        post.image_url = await _resolve_post_image_url(image, image_url)
+    if status is not None:
+        post.status = _resolve_post_status(status, current_user)
+    if image is not None:
+        post.image_url = await _resolve_post_image_url(image)
 
     db.commit()
     db.refresh(post)
@@ -196,10 +247,11 @@ def delete_post(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
-    _ensure_admin(current_user)
     post = db.query(models.Post).filter(models.Post.id == post_id).first()
     if not post:
         raise HTTPException(status_code=404, detail="Post nao encontrado")
+    if not current_user.is_admin and post.author_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Sem permissao para remover post")
     db.delete(post)
     db.commit()
     return None
@@ -214,6 +266,8 @@ def toggle_like(
     post = db.query(models.Post).filter(models.Post.id == post_id).first()
     if not post:
         raise HTTPException(status_code=404, detail="Post nao encontrado")
+    if post.status != "published":
+        raise HTTPException(status_code=403, detail="Nao e possivel curtir rascunho")
 
     like = (
         db.query(models.PostLike)
@@ -267,6 +321,8 @@ def list_comments(
     post = db.query(models.Post).filter(models.Post.id == post_id).first()
     if not post:
         raise HTTPException(status_code=404, detail="Post nao encontrado")
+    if post.status != "published":
+        raise HTTPException(status_code=403, detail="Comentarios disponiveis apenas em posts publicados")
 
     comments = (
         db.query(models.PostComment)
@@ -308,6 +364,8 @@ def create_comment(
     post = db.query(models.Post).filter(models.Post.id == post_id).first()
     if not post:
         raise HTTPException(status_code=404, detail="Post nao encontrado")
+    if post.status != "published":
+        raise HTTPException(status_code=403, detail="Nao e possivel comentar em rascunho")
 
     content = payload.content.strip()
     if not content:

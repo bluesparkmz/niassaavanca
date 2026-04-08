@@ -19,13 +19,13 @@ from routers.posts import router as posts_router  # noqa: E402
 from routers.ai import router as ai_router  # noqa: E402
 from database import init_db  # noqa: E402
 
-app = FastAPI(title="MeuChat")
+app = FastAPI(title="NiassaAvanca")
 templates = Jinja2Templates(directory=str(app_dir / "templates"))
 logger = logging.getLogger(__name__)
 
 cors_origins = os.getenv(
     "CORS_ORIGINS",
-    "https://meuchat.bluesparkmz.com,https://meuchat-mz.vercel.app,https://www.meuchat-mz.vercel.app,https://niassaavanca.bluesparkmz.com,https://www.niassaavanca.bluesparkmz.com,https://niassa-avanca.bluesparkmz.com,https://www.niassa-avanca.bluesparkmz.com,http://localhost:8080,http://127.0.0.1:8080,http://localhost:8081,http://127.0.0.1:8081,http://localhost:5173,http://127.0.0.1:5173",
+    "https://niassaavanca.bluesparkmz.com",
 )
 allow_origins = [origin.strip() for origin in cors_origins.split(",") if origin.strip()]
 cors_origin_regex = os.getenv(
