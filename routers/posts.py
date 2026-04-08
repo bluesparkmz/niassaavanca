@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 import models
 import schemmas
-from auth import get_current_user
+from auth import get_current_user, get_current_user_optional
 from database import get_db
 from controllers.storage_manager import POSTS_FOLDER, storage_manager
 
@@ -20,11 +20,15 @@ def _ensure_admin(current_user: models.User) -> None:
         raise HTTPException(status_code=403, detail="Apenas admin pode publicar")
 
 
-def _can_access_post(post: models.Post, current_user: models.User) -> bool:
-    return post.status == "published" or current_user.is_admin or post.author_id == current_user.id
+def _can_access_post(post: models.Post, current_user: models.User | None) -> bool:
+    if post.status == "published":
+        return True
+    if current_user is None:
+        return False
+    return current_user.is_admin or post.author_id == current_user.id
 
 
-def _ensure_post_visible(post: models.Post, current_user: models.User) -> None:
+def _ensure_post_visible(post: models.Post, current_user: models.User | None) -> None:
     if not _can_access_post(post, current_user):
         raise HTTPException(status_code=404, detail="Post nao encontrado")
 
@@ -62,7 +66,7 @@ async def _resolve_post_image_url(
     return None
 
 
-def _build_post_out(post: models.Post, current_user_id: int, db: Session) -> schemmas.PostOut:
+def _build_post_out(post: models.Post, current_user_id: int | None, db: Session) -> schemmas.PostOut:
     likes_count = _count_post_likes(db, post.id)
     comments_count = (
         db.query(func.count(models.PostComment.id))
@@ -70,15 +74,17 @@ def _build_post_out(post: models.Post, current_user_id: int, db: Session) -> sch
         .scalar()
         or 0
     )
-    liked_by_me = (
-        db.query(models.PostLike.id)
-        .filter(
-            models.PostLike.post_id == post.id,
-            models.PostLike.user_id == current_user_id,
+    liked_by_me = False
+    if current_user_id is not None:
+        liked_by_me = (
+            db.query(models.PostLike.id)
+            .filter(
+                models.PostLike.post_id == post.id,
+                models.PostLike.user_id == current_user_id,
+            )
+            .first()
+            is not None
         )
-        .first()
-        is not None
-    )
 
     return schemmas.PostOut(
         id=post.id,
@@ -108,7 +114,7 @@ def list_posts(
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user),
+    current_user: models.User | None = Depends(get_current_user_optional),
 ):
     query = (
         db.query(models.Post)
@@ -118,7 +124,8 @@ def list_posts(
     if topic:
         query = query.filter(models.Post.topic == topic)
     posts = query.offset(offset).limit(limit).all()
-    return [_build_post_out(post, current_user.id, db) for post in posts]
+    current_user_id = current_user.id if current_user else None
+    return [_build_post_out(post, current_user_id, db) for post in posts]
 
 
 @router.get("/me", response_model=list[schemmas.PostOut])
@@ -147,13 +154,14 @@ def list_my_posts(
 def get_post(
     post_id: int,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user),
+    current_user: models.User | None = Depends(get_current_user_optional),
 ):
     post = db.query(models.Post).filter(models.Post.id == post_id).first()
     if not post:
         raise HTTPException(status_code=404, detail="Post nao encontrado")
     _ensure_post_visible(post, current_user)
-    return _build_post_out(post, current_user.id, db)
+    current_user_id = current_user.id if current_user else None
+    return _build_post_out(post, current_user_id, db)
 
 
 @router.post("/", response_model=schemmas.PostOut, status_code=status.HTTP_201_CREATED)
@@ -315,7 +323,7 @@ def list_comments(
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user),
+    current_user: models.User | None = Depends(get_current_user_optional),
 ):
     _ = current_user
     post = db.query(models.Post).filter(models.Post.id == post_id).first()
