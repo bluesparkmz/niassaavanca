@@ -63,3 +63,4 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
 @app.on_event("startup")
 def startup() -> None:
     init_db()
+
