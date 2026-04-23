@@ -11,7 +11,7 @@ from datetime import datetime
 
 # Configurações
 GOOGLE_TOKENINFO_URL = "https://oauth2.googleapis.com/tokeninfo"
-GOOGLE_DEFAULT_CLIENT_ID = "690521786732-6rh6blrhbu1ndqrpc2513mlv3mvrdacg.apps.googleusercontent.com"
+GOOGLE_DEFAULT_CLIENT_ID = "690521786732-am1r9nqeg1qdtr1b52esq8kq8panhdi1.apps.googleusercontent.com"
 BACKEND_URL = os.getenv("BACKEND_URL", "https://meuchat-production.up.railway.app")
 
 def test_verify_token(id_token: str):
@@ -89,12 +89,12 @@ def test_verify_token(id_token: str):
 def test_backend_login(id_token: str):
     """Testa o endpoint de login no backend"""
     print(f"\n{'='*60}")
-    print("TESTE 3: Testar endpoint /users/login-google")
+    print("TESTE 3: Testar endpoint /auth/login-google")
     print(f"{'='*60}")
     
     try:
         response = requests.post(
-            f"{BACKEND_URL}/users/login-google",
+            f"{BACKEND_URL}/auth/login-google",
             json={"id_token": id_token},
             timeout=10,
         )
@@ -124,7 +124,7 @@ if __name__ == "__main__":
     id_token = sys.argv[1]
     
     print("\n" + "="*60)
-    print("TESTE DE LOGIN GOOGLE - MeuChat Backend")
+    print("TESTE DE LOGIN GOOGLE - Niassa Avanca Backend")
     print("="*60)
     
     # Teste 1: Validar token

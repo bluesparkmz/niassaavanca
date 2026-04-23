@@ -22,6 +22,15 @@ class LoginRequest(BaseModel):
     password: str = Field(..., min_length=4)
 
 
+class GoogleLoginRequest(BaseModel):
+    id_token: str = Field(..., min_length=20)
+
+
+class GoogleConfigOut(BaseModel):
+    client_id: str
+    provider: str = "google"
+
+
 class UserOut(BaseModel):
     id: int
     full_name: str

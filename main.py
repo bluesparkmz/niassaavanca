@@ -25,7 +25,7 @@ app = FastAPI(title="Niassa Avança API", version="1.0.0")
 
 cors_origins = os.getenv(
     "CORS_ORIGINS",
-    "http://localhost:5173,http://127.0.0.1:5173,https://niassa.co.mz",
+    "http://localhost:5173,http://127.0.0.1:5173,https://niassa.co.mz,https://api.niassa.co.mz",
 )
 allow_origins = [origin.strip() for origin in cors_origins.split(",") if origin.strip()]
 

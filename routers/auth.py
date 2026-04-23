@@ -1,3 +1,8 @@
+import os
+import secrets
+from datetime import datetime, timezone
+
+import requests
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
@@ -9,6 +14,9 @@ from database import get_db
 
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+GOOGLE_TOKENINFO_URL = "https://oauth2.googleapis.com/tokeninfo"
+GOOGLE_DEFAULT_CLIENT_ID = "690521786732-am1r9nqeg1qdtr1b52esq8kq8panhdi1.apps.googleusercontent.com"
 
 
 def _slugify(text: str) -> str:
@@ -138,6 +146,86 @@ def _authenticate(db: Session, identifier: str, password: str) -> models.User | 
     return user
 
 
+def _get_allowed_google_client_ids() -> set[str]:
+    raw = os.getenv("GOOGLE_CLIENT_IDS") or os.getenv("GOOGLE_CLIENT_ID") or GOOGLE_DEFAULT_CLIENT_ID
+    return {item.strip() for item in raw.split(",") if item.strip()}
+
+
+def _verify_google_id_token(id_token: str) -> dict:
+    try:
+        response = requests.get(
+            GOOGLE_TOKENINFO_URL,
+            params={"id_token": id_token},
+            timeout=10,
+        )
+    except requests.RequestException as exc:
+        raise HTTPException(status_code=502, detail="Falha ao validar token Google") from exc
+
+    if response.status_code >= 400:
+        raise HTTPException(status_code=401, detail="Token Google invalido")
+
+    payload = response.json()
+    aud = (payload.get("aud") or "").strip()
+    sub = (payload.get("sub") or "").strip()
+    email = (payload.get("email") or "").strip().lower()
+    exp = payload.get("exp")
+
+    if not aud or aud not in _get_allowed_google_client_ids():
+        raise HTTPException(status_code=401, detail="Cliente Google nao autorizado")
+    if not sub or not email:
+        raise HTTPException(status_code=401, detail="Token Google incompleto")
+
+    try:
+        expires_at = int(exp)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=401, detail="Expiracao do token Google invalida")
+
+    if expires_at <= int(datetime.now(timezone.utc).timestamp()):
+        raise HTTPException(status_code=401, detail="Token Google expirado")
+
+    if payload.get("email_verified") not in {"true", True}:
+        raise HTTPException(status_code=401, detail="Email Google nao verificado")
+
+    return payload
+
+
+def _find_or_create_google_user(db: Session, payload: dict) -> models.User:
+    email = payload["email"].strip().lower()
+    full_name = (payload.get("name") or payload.get("given_name") or email.split("@")[0]).strip()
+    avatar_url = (payload.get("picture") or "").strip() or None
+
+    user = db.query(models.User).filter(models.User.email == email).first()
+    if user:
+        changed = False
+        if full_name and user.full_name != full_name:
+            user.full_name = full_name
+            changed = True
+        if avatar_url and user.avatar_url != avatar_url:
+            user.avatar_url = avatar_url
+            changed = True
+        if not user.is_active:
+            user.is_active = True
+            changed = True
+        if changed:
+            db.commit()
+            db.refresh(user)
+        return user
+
+    user = models.User(
+        full_name=full_name,
+        email=email,
+        phone=None,
+        avatar_url=avatar_url,
+        password_hash=get_password_hash(secrets.token_urlsafe(32)),
+        role=models.UserRole.CUSTOMER,
+        is_active=True,
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return user
+
+
 @router.post("/register", response_model=schemmas.UserOut, status_code=status.HTTP_201_CREATED)
 def register_user(payload: schemmas.UserCreate, db: Session = Depends(get_db)):
     _ensure_unique_user(db, payload.email, payload.phone)
@@ -213,6 +301,20 @@ def login_json(payload: schemmas.LoginRequest, db: Session = Depends(get_db)):
     user = _authenticate(db, payload.identifier.strip(), payload.password)
     if not user:
         raise HTTPException(status_code=401, detail="Credenciais invalidas")
+    return schemmas.Token(access_token=create_access_token({"sub": user.id}))
+
+
+@router.get("/google-config", response_model=schemmas.GoogleConfigOut)
+def google_config():
+    return schemmas.GoogleConfigOut(
+        client_id=os.getenv("GOOGLE_CLIENT_ID", GOOGLE_DEFAULT_CLIENT_ID),
+    )
+
+
+@router.post("/login-google", response_model=schemmas.Token)
+def login_google(payload: schemmas.GoogleLoginRequest, db: Session = Depends(get_db)):
+    google_payload = _verify_google_id_token(payload.id_token.strip())
+    user = _find_or_create_google_user(db, google_payload)
     return schemmas.Token(access_token=create_access_token({"sub": user.id}))
 
 
