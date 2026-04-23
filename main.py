@@ -25,14 +25,18 @@ app = FastAPI(title="Niassa Avança API", version="1.0.0")
 
 cors_origins = os.getenv(
     "CORS_ORIGINS",
-    "http://localhost:5173,http://127.0.0.1:5173,https://niassa.co.mz,https://api.niassa.co.mz",
+    "http://localhost:5173,http://127.0.0.1:5173,https://niassa.co.mz,https://www.niassa.co.mz,https://api.niassa.co.mz",
 )
 allow_origins = [origin.strip() for origin in cors_origins.split(",") if origin.strip()]
+allow_origin_regex = os.getenv(
+    "CORS_ORIGIN_REGEX",
+    r"^https://([a-zA-Z0-9-]+\.)?(niassa\.co\.mz|vercel\.app)$",
+)
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allow_origins,
-    allow_origin_regex=os.getenv("CORS_ORIGIN_REGEX", r"^https://([a-zA-Z0-9-]+\.)?vercel\.app$"),
+    allow_origin_regex=allow_origin_regex,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
