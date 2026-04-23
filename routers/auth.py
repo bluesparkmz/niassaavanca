@@ -23,6 +23,26 @@ def _slugify(text: str) -> str:
     return "-".join(text.strip().lower().split())
 
 
+def _normalize_username(value: str) -> str:
+    cleaned = "".join(ch.lower() if ch.isalnum() else "_" for ch in value.strip())
+    cleaned = "_".join(part for part in cleaned.split("_") if part)
+    return cleaned[:32] or "utilizador"
+
+
+def _ensure_unique_username(db: Session, username: str, exclude_user_id: int | None = None) -> str:
+    base_username = _normalize_username(username)
+    candidate = base_username
+    index = 2
+    while True:
+        query = db.query(models.User).filter(models.User.legacy_username == candidate)
+        if exclude_user_id is not None:
+            query = query.filter(models.User.id != exclude_user_id)
+        if not query.first():
+            return candidate
+        candidate = f"{base_username}_{index}"
+        index += 1
+
+
 def _ensure_unique_user(db: Session, email: str, phone: str | None) -> None:
     if db.query(models.User).filter(models.User.email == email).first():
         raise HTTPException(status_code=400, detail="Email ja existe")
@@ -193,6 +213,7 @@ def _find_or_create_google_user(db: Session, payload: dict) -> models.User:
     email = payload["email"].strip().lower()
     full_name = (payload.get("name") or payload.get("given_name") or email.split("@")[0]).strip()
     avatar_url = (payload.get("picture") or "").strip() or None
+    desired_username = _normalize_username(email.split("@")[0] or full_name)
 
     user = db.query(models.User).filter(models.User.email == email).first()
     if user:
@@ -202,6 +223,9 @@ def _find_or_create_google_user(db: Session, payload: dict) -> models.User:
             changed = True
         if full_name and getattr(user, "legacy_name", None) != full_name:
             user.legacy_name = full_name
+            changed = True
+        if not getattr(user, "legacy_username", None):
+            user.legacy_username = _ensure_unique_username(db, desired_username, exclude_user_id=user.id)
             changed = True
         if avatar_url and user.avatar_url != avatar_url:
             user.avatar_url = avatar_url
@@ -216,6 +240,7 @@ def _find_or_create_google_user(db: Session, payload: dict) -> models.User:
 
     user = models.User(
         legacy_name=full_name,
+        legacy_username=_ensure_unique_username(db, desired_username),
         full_name=full_name,
         email=email,
         phone=None,
@@ -235,6 +260,7 @@ def register_user(payload: schemmas.UserCreate, db: Session = Depends(get_db)):
     _ensure_unique_user(db, payload.email, payload.phone)
     user = models.User(
         legacy_name=payload.full_name.strip(),
+        legacy_username=_ensure_unique_username(db, payload.email.split("@")[0]),
         full_name=payload.full_name.strip(),
         email=payload.email.lower().strip(),
         phone=(payload.phone or "").strip() or None,
@@ -253,6 +279,7 @@ def register_company(payload: schemmas.CompanySignupRequest, db: Session = Depen
 
     user = models.User(
         legacy_name=payload.user.full_name.strip(),
+        legacy_username=_ensure_unique_username(db, payload.user.email.split("@")[0]),
         full_name=payload.user.full_name.strip(),
         email=payload.user.email.lower().strip(),
         phone=(payload.user.phone or "").strip() or None,

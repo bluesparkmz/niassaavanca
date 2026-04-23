@@ -66,6 +66,7 @@ def upgrade() -> None:
 
     if "users" in _table_names(inspector):
         _add_column_if_missing(inspector, "users", sa.Column("full_name", sa.String(length=140), nullable=True))
+        _add_column_if_missing(inspector, "users", sa.Column("username", sa.String(length=140), nullable=True))
         inspector = inspect(bind)
         columns = _column_names(inspector, "users")
         if "full_name" in columns:
@@ -90,6 +91,27 @@ def upgrade() -> None:
                     )
                 )
             op.alter_column("users", "full_name", existing_type=sa.String(length=140), nullable=False)
+        if "username" in columns:
+            if "email" in columns:
+                bind.execute(
+                    text(
+                        """
+                        UPDATE users
+                        SET username = COALESCE(NULLIF(username, ''), split_part(email, '@', 1), 'utilizador')
+                        WHERE username IS NULL OR username = ''
+                        """
+                    )
+                )
+            else:
+                bind.execute(
+                    text(
+                        """
+                        UPDATE users
+                        SET username = COALESCE(NULLIF(username, ''), 'utilizador')
+                        WHERE username IS NULL OR username = ''
+                        """
+                    )
+                )
 
         _add_column_if_missing(inspector, "users", sa.Column("phone", sa.String(length=30), nullable=True))
         _add_column_if_missing(inspector, "users", sa.Column("avatar_url", sa.String(length=255), nullable=True))
@@ -128,4 +150,3 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     pass
-

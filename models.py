@@ -80,6 +80,7 @@ class User(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     legacy_name = Column("name", String(140), nullable=True)
+    legacy_username = Column("username", String(140), nullable=True)
     full_name = Column(String(140), nullable=False)
     email = Column(String(140), unique=True, index=True, nullable=False)
     phone = Column(String(30), unique=True, index=True, nullable=True)
