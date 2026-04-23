@@ -14,6 +14,12 @@ from database import get_db
 router = APIRouter(prefix="/companies", tags=["companies"])
 
 
+def _company_type_value(value: schemmas.CompanyCreate | models.CompanyType | str) -> str:
+    if isinstance(value, schemmas.CompanyCreate):
+        value = value.company_type
+    return value.value if hasattr(value, "value") else str(value).strip().lower()
+
+
 def _company_out(company: models.Company) -> schemmas.CompanyOut:
     return schemmas.CompanyOut(
         id=company.id,
@@ -145,7 +151,7 @@ def _ensure_unique_slug(db: Session, slug: str) -> str:
 
 
 def _create_company_profile(db: Session, company: models.Company, payload: schemmas.CompanyCreate) -> None:
-    company_type = payload.company_type.strip().lower()
+    company_type = _company_type_value(payload)
     if company_type in {models.CompanyType.LODGING.value, models.CompanyType.HOSPITALITY.value, models.CompanyType.BEACH.value}:
         db.add(
             models.LodgingProfile(
@@ -245,7 +251,7 @@ def create_company_after_login(
         owner_user_id=current_user.id,
         name=payload.name.strip(),
         slug=_ensure_unique_slug(db, _slugify(payload.name)),
-        company_type=payload.company_type.strip().lower(),
+        company_type=_company_type_value(payload),
         category=payload.category,
         location=payload.location.strip(),
         district=payload.district,

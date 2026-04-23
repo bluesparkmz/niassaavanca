@@ -2,7 +2,9 @@ from datetime import datetime
 from decimal import Decimal
 from typing import List, Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+import models
 
 
 class Token(BaseModel):
@@ -75,7 +77,7 @@ class ServiceIn(BaseModel):
 
 class CompanyCreate(BaseModel):
     name: str = Field(..., min_length=2, max_length=180)
-    company_type: str = Field(..., min_length=2, max_length=40)
+    company_type: models.CompanyType
     category: Optional[str] = Field(default=None, max_length=120)
     location: str = Field(..., min_length=2, max_length=180)
     district: Optional[str] = Field(default=None, max_length=180)
@@ -111,6 +113,41 @@ class CompanyCreate(BaseModel):
     social_links: List[dict] = Field(default_factory=list)
     products: List[ProductIn] = Field(default_factory=list)
     services: List[ServiceIn] = Field(default_factory=list)
+
+    @field_validator("company_type", mode="before")
+    @classmethod
+    def normalize_company_type(cls, value: object) -> object:
+        if isinstance(value, models.CompanyType):
+            return value
+        if not isinstance(value, str):
+            return value
+
+        normalized = value.strip().lower()
+        aliases = {
+            "alojamento": models.CompanyType.LODGING,
+            "beach": models.CompanyType.BEACH,
+            "experiencia": models.CompanyType.EXPERIENCE,
+            "experiência": models.CompanyType.EXPERIENCE,
+            "fornecedor": models.CompanyType.SUPPLIER,
+            "hotelaria": models.CompanyType.HOSPITALITY,
+            "praia": models.CompanyType.BEACH,
+            "praias": models.CompanyType.BEACH,
+            "producer": models.CompanyType.PRODUCER,
+            "produtor": models.CompanyType.PRODUCER,
+            "restaurant": models.CompanyType.RESTAURANT,
+            "restaurante": models.CompanyType.RESTAURANT,
+            "restauracao": models.CompanyType.RESTAURANT,
+            "restauração": models.CompanyType.RESTAURANT,
+            "service": models.CompanyType.SERVICE,
+            "servico": models.CompanyType.SERVICE,
+            "serviço": models.CompanyType.SERVICE,
+            "servicos": models.CompanyType.SERVICE,
+            "serviços": models.CompanyType.SERVICE,
+            "supplier": models.CompanyType.SUPPLIER,
+            "hospitality": models.CompanyType.HOSPITALITY,
+            "lodging": models.CompanyType.LODGING,
+        }
+        return aliases.get(normalized, normalized)
 
 
 class CompanySignupRequest(BaseModel):
