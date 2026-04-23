@@ -13,9 +13,10 @@ except ImportError:
     BOTO3_AVAILABLE = False
 
 
-MEUCHAT_PREFIX = "meuchat"
-AVATARS_FOLDER = f"{MEUCHAT_PREFIX}/avatars"
-POSTS_FOLDER = f"{MEUCHAT_PREFIX}/posts"
+APP_PREFIX = "niassaavanca"
+AVATARS_FOLDER = f"{APP_PREFIX}/avatars"
+POSTS_FOLDER = f"{APP_PREFIX}/posts"
+COMPANIES_FOLDER = f"{APP_PREFIX}/companies"
 
 R2_ACCOUNT_ID = os.getenv("R2_ACCOUNT_ID")
 R2_ACCESS_KEY_ID = os.getenv("R2_ACCESS_KEY_ID")

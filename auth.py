@@ -3,23 +3,23 @@ from typing import Optional
 
 import os
 
+from fastapi import Depends, HTTPException, WebSocket, status
+from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
 from passlib.context import CryptContext
-from fastapi import Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 
 import models
 from database import get_db
 
-# Comentario: configure estas chaves em variaveis de ambiente em producao.
+
 SECRET_KEY = os.getenv("SECRET_KEY", "change-me-in-production")
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24
+ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "1440"))
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/users/login")
-oauth2_scheme_optional = OAuth2PasswordBearer(tokenUrl="/users/login", auto_error=False)
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
+oauth2_scheme_optional = OAuth2PasswordBearer(tokenUrl="/auth/login", auto_error=False)
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
@@ -39,27 +39,33 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
 
-def get_current_user(
-    token: str = Depends(oauth2_scheme),
-    db: Session = Depends(get_db),
-) -> models.User:
-    credentials_exception = HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Could not validate credentials",
-        headers={"WWW-Authenticate": "Bearer"},
-    )
+def _decode_token(token: str) -> int:
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         sub = payload.get("sub")
         if sub is None:
-            raise credentials_exception
-        user_id = int(sub)
-    except JWTError:
-        raise credentials_exception
+            raise ValueError("missing-sub")
+        return int(sub)
+    except (JWTError, ValueError):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Credenciais invalidas",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
 
-    user = db.query(models.User).filter(models.User.id == user_id).first()
+
+def get_current_user(
+    token: str = Depends(oauth2_scheme),
+    db: Session = Depends(get_db),
+) -> models.User:
+    user_id = _decode_token(token)
+    user = db.query(models.User).filter(models.User.id == user_id, models.User.is_active == True).first()
     if user is None:
-        raise credentials_exception
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Utilizador nao encontrado",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
     return user
 
 
@@ -69,7 +75,6 @@ def get_current_user_optional(
 ) -> Optional[models.User]:
     if not token:
         return None
-
     try:
         return get_current_user(token=token, db=db)
     except HTTPException:
@@ -77,17 +82,19 @@ def get_current_user_optional(
 
 
 def get_user_from_token(token: str, db: Session) -> models.User:
-    # Comentario: usado para WebSocket onde Depends nao funciona.
-    try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        sub = payload.get("sub")
-        if sub is None:
-            raise HTTPException(status_code=401, detail="Token invalido")
-        user_id = int(sub)
-    except JWTError:
-        raise HTTPException(status_code=401, detail="Token invalido")
-
-    user = db.query(models.User).filter(models.User.id == user_id).first()
+    user_id = _decode_token(token)
+    user = db.query(models.User).filter(models.User.id == user_id, models.User.is_active == True).first()
     if user is None:
-        raise HTTPException(status_code=401, detail="Usuario nao encontrado")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Utilizador nao encontrado")
     return user
+
+
+def get_user_from_websocket_token(websocket: WebSocket, db: Session) -> models.User:
+    token = websocket.query_params.get("token", "").strip()
+    if not token:
+        auth_header = websocket.headers.get("authorization", "").strip()
+        if auth_header.lower().startswith("bearer "):
+            token = auth_header[7:].strip()
+    if not token:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token ausente")
+    return get_user_from_token(token, db)
