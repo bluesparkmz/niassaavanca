@@ -67,6 +67,7 @@ def upgrade() -> None:
     if "users" in _table_names(inspector):
         _add_column_if_missing(inspector, "users", sa.Column("full_name", sa.String(length=140), nullable=True))
         _add_column_if_missing(inspector, "users", sa.Column("username", sa.String(length=140), nullable=True))
+        _add_column_if_missing(inspector, "users", sa.Column("is_admin", sa.Boolean(), nullable=True))
         inspector = inspect(bind)
         columns = _column_names(inspector, "users")
         if "full_name" in columns:
@@ -112,6 +113,16 @@ def upgrade() -> None:
                         """
                     )
                 )
+        if "is_admin" in columns:
+            bind.execute(
+                text(
+                    """
+                    UPDATE users
+                    SET is_admin = COALESCE(is_admin, false)
+                    WHERE is_admin IS NULL
+                    """
+                )
+            )
 
         _add_column_if_missing(inspector, "users", sa.Column("phone", sa.String(length=30), nullable=True))
         _add_column_if_missing(inspector, "users", sa.Column("avatar_url", sa.String(length=255), nullable=True))

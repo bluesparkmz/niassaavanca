@@ -34,7 +34,7 @@ def _ensure_unique_username(db: Session, username: str, exclude_user_id: int | N
     candidate = base_username
     index = 2
     while True:
-        query = db.query(models.User).filter(models.User.legacy_username == candidate)
+        query = db.query(models.User).filter(models.User.username == candidate)
         if exclude_user_id is not None:
             query = query.filter(models.User.id != exclude_user_id)
         if not query.first():
@@ -221,11 +221,11 @@ def _find_or_create_google_user(db: Session, payload: dict) -> models.User:
         if full_name and user.full_name != full_name:
             user.full_name = full_name
             changed = True
-        if full_name and getattr(user, "legacy_name", None) != full_name:
-            user.legacy_name = full_name
+        if full_name and getattr(user, "name", None) != full_name:
+            user.name = full_name
             changed = True
-        if not getattr(user, "legacy_username", None):
-            user.legacy_username = _ensure_unique_username(db, desired_username, exclude_user_id=user.id)
+        if not getattr(user, "username", None):
+            user.username = _ensure_unique_username(db, desired_username, exclude_user_id=user.id)
             changed = True
         if avatar_url and user.avatar_url != avatar_url:
             user.avatar_url = avatar_url
@@ -239,8 +239,8 @@ def _find_or_create_google_user(db: Session, payload: dict) -> models.User:
         return user
 
     user = models.User(
-        legacy_name=full_name,
-        legacy_username=_ensure_unique_username(db, desired_username),
+        name=full_name,
+        username=_ensure_unique_username(db, desired_username),
         full_name=full_name,
         email=email,
         phone=None,
@@ -259,8 +259,8 @@ def _find_or_create_google_user(db: Session, payload: dict) -> models.User:
 def register_user(payload: schemmas.UserCreate, db: Session = Depends(get_db)):
     _ensure_unique_user(db, payload.email, payload.phone)
     user = models.User(
-        legacy_name=payload.full_name.strip(),
-        legacy_username=_ensure_unique_username(db, payload.email.split("@")[0]),
+        name=payload.full_name.strip(),
+        username=_ensure_unique_username(db, payload.email.split("@")[0]),
         full_name=payload.full_name.strip(),
         email=payload.email.lower().strip(),
         phone=(payload.phone or "").strip() or None,
@@ -278,8 +278,8 @@ def register_company(payload: schemmas.CompanySignupRequest, db: Session = Depen
     _ensure_unique_user(db, payload.user.email, payload.user.phone)
 
     user = models.User(
-        legacy_name=payload.user.full_name.strip(),
-        legacy_username=_ensure_unique_username(db, payload.user.email.split("@")[0]),
+        name=payload.user.full_name.strip(),
+        username=_ensure_unique_username(db, payload.user.email.split("@")[0]),
         full_name=payload.user.full_name.strip(),
         email=payload.user.email.lower().strip(),
         phone=(payload.user.phone or "").strip() or None,
@@ -364,7 +364,7 @@ def update_me(
 ):
     data = payload.model_dump(exclude_unset=True)
     if "full_name" in data and data["full_name"]:
-        data["legacy_name"] = data["full_name"]
+        data["name"] = data["full_name"]
     if "phone" in data and data["phone"]:
         exists = (
             db.query(models.User)
