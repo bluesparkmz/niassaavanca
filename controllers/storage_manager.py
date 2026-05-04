@@ -67,14 +67,14 @@ class StorageManager:
                 config=BotoConfig(signature_version="s3v4"),
                 region_name="auto",
             )
+        else:
+            # Fallback to local storage
+            self.upload_dir = Path("uploads")
+            self.upload_dir.mkdir(exist_ok=True)
 
     def _require_config(self) -> None:
-        if self.use_r2:
-            return
-        detail = "Cloudflare R2 nao configurado."
-        if not BOTO3_AVAILABLE:
-            detail = "Dependencia boto3 ausente."
-        raise HTTPException(status_code=500, detail=detail)
+        # We don't require R2 anymore, we can fallback to local
+        pass
 
     async def upload_file(
         self,
@@ -84,8 +84,6 @@ class StorageManager:
         allowed_mime_prefixes: tuple[str, ...],
         custom_filename: str | None = None,
     ) -> str:
-        self._require_config()
-
         content_type = file.content_type or ""
         if allowed_mime_prefixes and not any(content_type.startswith(prefix) for prefix in allowed_mime_prefixes):
             raise HTTPException(status_code=400, detail="Tipo de arquivo nao permitido")
@@ -100,13 +98,22 @@ class StorageManager:
         key = f"{clean_folder}/{filename}" if clean_folder else filename
         body = await file.read()
 
-        self.s3_client.put_object(
-            Bucket=self.bucket_name,
-            Key=key,
-            Body=body,
-            ContentType=content_type or "application/octet-stream",
-        )
-        return f"{self.public_url}/{key}"
+        if self.use_r2:
+            self.s3_client.put_object(
+                Bucket=self.bucket_name,
+                Key=key,
+                Body=body,
+                ContentType=content_type or "application/octet-stream",
+            )
+            return f"{self.public_url}/{key}"
+        else:
+            # Save locally
+            local_path = self.upload_dir / key
+            local_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(local_path, "wb") as f:
+                f.write(body)
+            # Return relative URL that will be served by FastAPI
+            return f"/uploads/{key}"
 
 
 storage_manager = StorageManager()

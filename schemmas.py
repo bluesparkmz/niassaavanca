@@ -66,8 +66,26 @@ class ProductIn(BaseModel):
     short_description: Optional[str] = Field(default=None, max_length=255)
 
 
+class ProductUpdate(BaseModel):
+    name: Optional[str] = Field(default=None, min_length=2, max_length=180)
+    price_label: Optional[str] = Field(default=None, min_length=1, max_length=80)
+    price_amount: Optional[Decimal] = None
+    image_url: Optional[str] = None
+    category: Optional[str] = Field(default=None, max_length=120)
+    short_description: Optional[str] = Field(default=None, max_length=255)
+
+
 class ServiceIn(BaseModel):
     name: str = Field(..., min_length=2, max_length=180)
+    price_label: Optional[str] = Field(default=None, max_length=80)
+    price_amount: Optional[Decimal] = None
+    image_url: Optional[str] = None
+    category: Optional[str] = Field(default=None, max_length=120)
+    short_description: Optional[str] = Field(default=None, max_length=255)
+
+
+class ServiceUpdate(BaseModel):
+    name: Optional[str] = Field(default=None, min_length=2, max_length=180)
     price_label: Optional[str] = Field(default=None, max_length=80)
     price_amount: Optional[Decimal] = None
     image_url: Optional[str] = None
@@ -423,6 +441,7 @@ class RestaurantMenuItem(BaseModel):
     name: str
     desc: Optional[str] = None
     price: str
+    image: Optional[str] = None
 
 
 class RestaurantDetail(RestaurantSummary):

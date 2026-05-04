@@ -6,6 +6,7 @@ from pathlib import Path
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 
 app_dir = Path(__file__).resolve().parent
@@ -75,6 +76,10 @@ app.include_router(companies_router)
 app.include_router(catalog_router)
 app.include_router(notifications_router)
 app.include_router(ai_router)
+
+# Serve uploads folder
+os.makedirs("uploads", exist_ok=True)
+app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
 
 @app.get("/health")

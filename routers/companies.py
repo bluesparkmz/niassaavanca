@@ -539,6 +539,60 @@ def delete_restaurant_menu_item(
     return [schemmas.RestaurantMenuItem(**item) for item in items]
 
 
+@router.put("/{company_id}/restaurant-menu/{index}", response_model=list[schemmas.RestaurantMenuItem])
+def update_restaurant_menu_item(
+    company_id: int,
+    index: int,
+    payload: schemmas.RestaurantMenuItem,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    company = _owned_company(db, company_id, current_user)
+    if not company.restaurant_profile:
+        raise HTTPException(status_code=400, detail="Empresa sem perfil de restaurante")
+    items = list(company.restaurant_profile.menu_items or [])
+    if index < 0 or index >= len(items):
+        raise HTTPException(status_code=404, detail="Item do menu nao encontrado")
+    
+    # Update existing item preserving fields not in payload if any (though currently payload has all)
+    current = items[index]
+    updated = payload.model_dump()
+    # Preserve image if not provided in payload but exists in current
+    if not updated.get("image") and current.get("image"):
+        updated["image"] = current["image"]
+        
+    items[index] = updated
+    company.restaurant_profile.menu_items = items
+    db.commit()
+    return [schemmas.RestaurantMenuItem(**item) for item in items]
+
+
+@router.post("/{company_id}/restaurant-menu/{index}/upload-image")
+async def upload_restaurant_menu_item_image(
+    company_id: int,
+    index: int,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    company = _owned_company(db, company_id, current_user)
+    if not company.restaurant_profile:
+        raise HTTPException(status_code=400, detail="Empresa sem perfil de restaurante")
+    items = list(company.restaurant_profile.menu_items or [])
+    if index < 0 or index >= len(items):
+        raise HTTPException(status_code=404, detail="Item do menu nao encontrado")
+    
+    url = await storage_manager.upload_file(
+        file,
+        COMPANIES_FOLDER,
+        allowed_mime_prefixes=("image/",),
+    )
+    items[index]["image"] = url
+    company.restaurant_profile.menu_items = items
+    db.commit()
+    return {"url": url}
+
+
 @router.post("/{company_id}/services", response_model=schemmas.CompanyServiceOut)
 def create_company_service(
     company_id: int,
@@ -576,6 +630,31 @@ def delete_company_service(
     db.delete(item)
     db.commit()
     return {"status": "ok"}
+
+
+@router.put("/{company_id}/services/{service_id}", response_model=schemmas.CompanyServiceOut)
+def update_company_service(
+    company_id: int,
+    service_id: int,
+    payload: schemmas.ServiceUpdate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    company = _owned_company(db, company_id, current_user)
+    item = next((service for service in company.services if service.id == service_id), None)
+    if not item:
+        raise HTTPException(status_code=404, detail="Servico nao encontrado")
+    
+    data = payload.model_dump(exclude_unset=True)
+    for key, value in data.items():
+        if key == "image_url":
+            item.image_url = value
+        else:
+            setattr(item, key, value)
+            
+    db.commit()
+    db.refresh(item)
+    return _service_out(item)
 
 
 @router.get("/{company_id}/products", response_model=list[schemmas.ProducerProductOut])
@@ -631,6 +710,33 @@ def delete_company_product(
     db.delete(item)
     db.commit()
     return {"status": "ok"}
+
+
+@router.put("/{company_id}/products/{product_id}", response_model=schemmas.ProducerProductOut)
+def update_company_product(
+    company_id: int,
+    product_id: int,
+    payload: schemmas.ProductUpdate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    company = _owned_company(db, company_id, current_user)
+    if not company.producer_profile:
+        raise HTTPException(status_code=400, detail="Esta empresa nao suporta produtos de mercado")
+    item = next((product for product in company.producer_profile.products if product.id == product_id), None)
+    if not item:
+        raise HTTPException(status_code=404, detail="Produto nao encontrado")
+    
+    data = payload.model_dump(exclude_unset=True)
+    for key, value in data.items():
+        if key == "image_url":
+            item.image_url = value
+        else:
+            setattr(item, key, value)
+            
+    db.commit()
+    db.refresh(item)
+    return _product_out(item)
 
 
 @router.get("/{company_id}/leads", response_model=list[schemmas.LeadOut])
