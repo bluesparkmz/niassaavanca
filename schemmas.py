@@ -55,11 +55,17 @@ class MenuItemIn(BaseModel):
     name: str = Field(..., min_length=2, max_length=180)
     desc: Optional[str] = Field(default=None, max_length=255)
     price: str = Field(..., min_length=1, max_length=80)
+    item_type: str = models.RestaurantMenuItemType.FOOD.value
+
+    @field_validator("item_type", mode="before")
+    @classmethod
+    def normalize_item_type(cls, value: object) -> object:
+        return RestaurantMenuItem.normalize_item_type(value)
 
 
 class ProductIn(BaseModel):
     name: str = Field(..., min_length=2, max_length=180)
-    price_label: str = Field(..., min_length=1, max_length=80)
+    price_label: Optional[str] = Field(default=None, min_length=1, max_length=80)
     price_amount: Optional[Decimal] = None
     image_url: Optional[str] = None
     category: Optional[str] = Field(default=None, max_length=120)
@@ -116,6 +122,10 @@ class CompanyCreate(BaseModel):
     rating: Optional[Decimal] = None
     badge: Optional[str] = Field(default=None, max_length=120)
     amenities: List[str] = Field(default_factory=list)
+    gallery_images: List[str] = Field(default_factory=list)
+    beach_access: bool = False
+    check_in_time: Optional[str] = Field(default=None, max_length=20)
+    check_out_time: Optional[str] = Field(default=None, max_length=20)
 
     host_name: Optional[str] = Field(default=None, max_length=180)
     schedule_text: Optional[str] = Field(default=None, max_length=180)
@@ -124,6 +134,7 @@ class CompanyCreate(BaseModel):
     cuisine: Optional[str] = Field(default=None, max_length=120)
     signature: Optional[str] = Field(default=None, max_length=180)
     menu_items: List[MenuItemIn] = Field(default_factory=list)
+    restaurant_gallery_images: List[str] = Field(default_factory=list)
 
     area: Optional[str] = Field(default=None, max_length=120)
     sales_count: int = 0
@@ -142,6 +153,25 @@ class CompanyCreate(BaseModel):
 
         normalized = value.strip().lower()
         aliases = {
+            "agencia de viagens": models.CompanyType.TRAVEL_AGENCY,
+            "agência de viagens": models.CompanyType.TRAVEL_AGENCY,
+            "agencia viagens": models.CompanyType.TRAVEL_AGENCY,
+            "agência viagens": models.CompanyType.TRAVEL_AGENCY,
+            "travel agency": models.CompanyType.TRAVEL_AGENCY,
+            "travel_agency": models.CompanyType.TRAVEL_AGENCY,
+            "agro e pecuaria": models.CompanyType.AGRO_LIVESTOCK,
+            "agro e pecuária": models.CompanyType.AGRO_LIVESTOCK,
+            "agropecuaria": models.CompanyType.AGRO_LIVESTOCK,
+            "agropecuária": models.CompanyType.AGRO_LIVESTOCK,
+            "agro_livestock": models.CompanyType.AGRO_LIVESTOCK,
+            "empresa de fornecimento de bens": models.CompanyType.GOODS_SUPPLIER,
+            "fornecimento de bens": models.CompanyType.GOODS_SUPPLIER,
+            "forncimento de bens": models.CompanyType.GOODS_SUPPLIER,
+            "goods supplier": models.CompanyType.GOODS_SUPPLIER,
+            "goods_supplier": models.CompanyType.GOODS_SUPPLIER,
+            "restaurante e residencias": models.CompanyType.RESTAURANT_RESIDENCE,
+            "restaurante e residências": models.CompanyType.RESTAURANT_RESIDENCE,
+            "restaurant_residence": models.CompanyType.RESTAURANT_RESIDENCE,
             "alojamento": models.CompanyType.LODGING,
             "beach": models.CompanyType.BEACH,
             "experiencia": models.CompanyType.EXPERIENCE,
@@ -228,6 +258,49 @@ class LodgingProfileUpdate(BaseModel):
     rating: Optional[Decimal] = None
     badge: Optional[str] = Field(default=None, max_length=120)
     amenities: Optional[List[str]] = None
+    gallery_images: Optional[List[str]] = None
+    beach_access: Optional[bool] = None
+    check_in_time: Optional[str] = Field(default=None, max_length=20)
+    check_out_time: Optional[str] = Field(default=None, max_length=20)
+
+
+class LodgingRoomIn(BaseModel):
+    name: str = Field(..., min_length=2, max_length=180)
+    room_type: Optional[str] = Field(default=None, max_length=80)
+    capacity: int = Field(default=1, ge=1, le=20)
+    price_per_night: Decimal = Field(default=0)
+    currency: str = Field(default="EUR", max_length=10)
+    total_units: int = Field(default=1, ge=1, le=500)
+    amenities: List[str] = Field(default_factory=list)
+    images: List[str] = Field(default_factory=list)
+    short_description: Optional[str] = Field(default=None, max_length=255)
+
+
+class LodgingRoomUpdate(BaseModel):
+    name: Optional[str] = Field(default=None, min_length=2, max_length=180)
+    room_type: Optional[str] = Field(default=None, max_length=80)
+    capacity: Optional[int] = Field(default=None, ge=1, le=20)
+    price_per_night: Optional[Decimal] = None
+    currency: Optional[str] = Field(default=None, max_length=10)
+    total_units: Optional[int] = Field(default=None, ge=1, le=500)
+    amenities: Optional[List[str]] = None
+    images: Optional[List[str]] = None
+    short_description: Optional[str] = Field(default=None, max_length=255)
+    active: Optional[bool] = None
+
+
+class LodgingRoomOut(BaseModel):
+    id: int
+    name: str
+    room_type: Optional[str] = None
+    capacity: int
+    price_per_night: Decimal
+    currency: str
+    total_units: int
+    amenities: List[str] = []
+    images: List[str] = []
+    short_description: Optional[str] = None
+    active: bool
 
 
 class ExperienceProfileUpdate(BaseModel):
@@ -241,6 +314,7 @@ class RestaurantProfileUpdate(BaseModel):
     cuisine: Optional[str] = Field(default=None, max_length=120)
     signature: Optional[str] = Field(default=None, max_length=180)
     rating: Optional[Decimal] = None
+    gallery_images: Optional[List[str]] = None
 
 
 class ProducerProfileUpdate(BaseModel):
@@ -289,6 +363,12 @@ class CompanySocialState(BaseModel):
     comments_count: int
     liked_by_me: bool = False
     following_by_me: bool = False
+
+
+class ProductSocialState(BaseModel):
+    product_id: int
+    likes_count: int
+    liked_by_me: bool = False
 
 
 class CompanyCommentCreate(BaseModel):
@@ -403,6 +483,11 @@ class LodgingSummary(BaseModel):
 class LodgingDetail(LodgingSummary):
     description: Optional[str] = None
     amenities: List[str] = []
+    gallery_images: List[str] = []
+    beach_access: bool = False
+    check_in_time: Optional[str] = None
+    check_out_time: Optional[str] = None
+    rooms: List["LodgingRoomOut"] = []
     services: List["CompanyServiceOut"] = []
 
 
@@ -441,11 +526,31 @@ class RestaurantMenuItem(BaseModel):
     name: str
     desc: Optional[str] = None
     price: str
+    item_type: str = models.RestaurantMenuItemType.FOOD.value
     image: Optional[str] = None
+
+    @field_validator("item_type", mode="before")
+    @classmethod
+    def normalize_item_type(cls, value: object) -> object:
+        if isinstance(value, models.RestaurantMenuItemType):
+            return value.value
+        if not isinstance(value, str):
+            return value
+        normalized = value.strip().lower()
+        aliases = {
+            "food": models.RestaurantMenuItemType.FOOD.value,
+            "comida": models.RestaurantMenuItemType.FOOD.value,
+            "meal": models.RestaurantMenuItemType.FOOD.value,
+            "drink": models.RestaurantMenuItemType.DRINK.value,
+            "bebida": models.RestaurantMenuItemType.DRINK.value,
+            "bebidas": models.RestaurantMenuItemType.DRINK.value,
+        }
+        return aliases.get(normalized, normalized)
 
 
 class RestaurantDetail(RestaurantSummary):
     description: Optional[str] = None
+    gallery_images: List[str] = []
     menu: List[RestaurantMenuItem] = []
     services: List["CompanyServiceOut"] = []
 
@@ -453,7 +558,8 @@ class RestaurantDetail(RestaurantSummary):
 class ProducerProductOut(BaseModel):
     id: int
     name: str
-    price: str
+    slug: str
+    price: Optional[str] = None
     price_amount: Optional[Decimal] = None
     image: Optional[str] = None
     category: Optional[str] = None
@@ -497,11 +603,20 @@ class ProducerDetail(ProducerSummary):
 class MarketProductOut(BaseModel):
     id: int
     name: str
-    price: str
+    slug: str
+    price: Optional[str] = None
     price_amount: Optional[Decimal] = None
     image: Optional[str] = None
     category: Optional[str] = None
     producer: ProducerSummary
+    seller_whatsapp: Optional[str] = None
+    whatsapp_order_link: Optional[str] = None
+    likes_count: int = 0
+    liked_by_me: bool = False
+
+
+class MarketProductDetailOut(MarketProductOut):
+    description: Optional[str] = None
 
 
 class HomeResponse(BaseModel):

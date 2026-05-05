@@ -29,6 +29,15 @@ def _slugify(text: str) -> str:
     return "-".join(text.strip().lower().split())
 
 
+def _ensure_unique_product_slug(db: Session, slug: str) -> str:
+    final_slug = slug
+    index = 2
+    while db.query(models.ProducerProduct).filter(models.ProducerProduct.slug == final_slug).first():
+        final_slug = f"{slug}-{index}"
+        index += 1
+    return final_slug
+
+
 def _normalize_username(value: str) -> str:
     cleaned = "".join(ch.lower() if ch.isalnum() else "_" for ch in value.strip())
     cleaned = "_".join(part for part in cleaned.split("_") if part)
@@ -67,7 +76,7 @@ def _ensure_unique_slug(db: Session, slug: str) -> str:
 
 def _create_company_profile(db: Session, company: models.Company, payload: schemmas.CompanyCreate) -> None:
     company_type = _company_type_value(payload)
-    if company_type in {models.CompanyType.LODGING.value, models.CompanyType.HOSPITALITY.value, models.CompanyType.BEACH.value}:
+    if company_type in models.LODGING_COMPANY_TYPES:
         db.add(
             models.LodgingProfile(
                 company_id=company.id,
@@ -77,9 +86,13 @@ def _create_company_profile(db: Session, company: models.Company, payload: schem
                 rating=payload.rating,
                 badge=payload.badge,
                 amenities=payload.amenities or [],
+                gallery_images=payload.gallery_images or [],
+                beach_access=payload.beach_access,
+                check_in_time=payload.check_in_time,
+                check_out_time=payload.check_out_time,
             )
         )
-    elif company_type == models.CompanyType.EXPERIENCE.value:
+    if company_type in models.EXPERIENCE_COMPANY_TYPES:
         db.add(
             models.ExperienceProfile(
                 company_id=company.id,
@@ -89,7 +102,7 @@ def _create_company_profile(db: Session, company: models.Company, payload: schem
                 category_label=payload.category_label or payload.category or "Experiência",
             )
         )
-    elif company_type == models.CompanyType.RESTAURANT.value:
+    if company_type in models.RESTAURANT_COMPANY_TYPES:
         db.add(
             models.RestaurantProfile(
                 company_id=company.id,
@@ -97,9 +110,10 @@ def _create_company_profile(db: Session, company: models.Company, payload: schem
                 signature=payload.signature,
                 rating=payload.rating,
                 menu_items=[item.model_dump() for item in payload.menu_items],
+                gallery_images=payload.restaurant_gallery_images or [],
             )
         )
-    elif company_type in {models.CompanyType.PRODUCER.value, models.CompanyType.SUPPLIER.value}:
+    if company_type in models.PRODUCT_COMPANY_TYPES:
         producer = models.ProducerProfile(
             company_id=company.id,
             area=payload.area or payload.category or "Produtor",
@@ -115,6 +129,7 @@ def _create_company_profile(db: Session, company: models.Company, payload: schem
                 models.ProducerProduct(
                     producer_id=producer.id,
                     name=item.name,
+                    slug=_ensure_unique_product_slug(db, _slugify(item.name)),
                     price_label=item.price_label,
                     price_amount=item.price_amount,
                     image_url=item.image_url,
@@ -415,12 +430,28 @@ def get_profile_summary(
 @router.get("/company-types", response_model=list[schemmas.CompanyTypeOption])
 def list_company_types():
     return [
-        schemmas.CompanyTypeOption(code="producer", label="Produtor", supports_products=True, supports_services=True),
-        schemmas.CompanyTypeOption(code="supplier", label="Fornecedor", supports_products=True, supports_services=True),
-        schemmas.CompanyTypeOption(code="hospitality", label="Hotelaria", supports_products=False, supports_services=True),
-        schemmas.CompanyTypeOption(code="lodging", label="Alojamento", supports_products=False, supports_services=True),
-        schemmas.CompanyTypeOption(code="restaurant", label="Restaurante", supports_products=False, supports_services=True),
-        schemmas.CompanyTypeOption(code="experience", label="Experiência", supports_products=False, supports_services=True),
-        schemmas.CompanyTypeOption(code="beach", label="Praias", supports_products=False, supports_services=True),
-        schemmas.CompanyTypeOption(code="service", label="Serviços", supports_products=False, supports_services=True),
+        schemmas.CompanyTypeOption(
+            code=models.CompanyType.GOODS_SUPPLIER.value,
+            label="Empresa de fornecimento de bens",
+            supports_products=True,
+            supports_services=True,
+        ),
+        schemmas.CompanyTypeOption(
+            code=models.CompanyType.AGRO_LIVESTOCK.value,
+            label="Agro e pecuária",
+            supports_products=True,
+            supports_services=True,
+        ),
+        schemmas.CompanyTypeOption(
+            code=models.CompanyType.RESTAURANT_RESIDENCE.value,
+            label="Restaurante e residências",
+            supports_products=False,
+            supports_services=True,
+        ),
+        schemmas.CompanyTypeOption(
+            code=models.CompanyType.TRAVEL_AGENCY.value,
+            label="Agência de viagens",
+            supports_products=False,
+            supports_services=True,
+        ),
     ]

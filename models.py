@@ -27,6 +27,13 @@ class UserRole(str, enum.Enum):
 
 
 class CompanyType(str, enum.Enum):
+    # New business-focused types
+    GOODS_SUPPLIER = "goods_supplier"
+    AGRO_LIVESTOCK = "agro_livestock"
+    RESTAURANT_RESIDENCE = "restaurant_residence"
+    TRAVEL_AGENCY = "travel_agency"
+
+    # Legacy types kept for backward compatibility
     HOSPITALITY = "hospitality"
     LODGING = "lodging"
     EXPERIENCE = "experience"
@@ -35,6 +42,31 @@ class CompanyType(str, enum.Enum):
     SUPPLIER = "supplier"
     BEACH = "beach"
     SERVICE = "service"
+
+
+LODGING_COMPANY_TYPES = {
+    CompanyType.HOSPITALITY.value,
+    CompanyType.LODGING.value,
+    CompanyType.BEACH.value,
+    CompanyType.RESTAURANT_RESIDENCE.value,
+}
+
+EXPERIENCE_COMPANY_TYPES = {
+    CompanyType.EXPERIENCE.value,
+    CompanyType.TRAVEL_AGENCY.value,
+}
+
+RESTAURANT_COMPANY_TYPES = {
+    CompanyType.RESTAURANT.value,
+    CompanyType.RESTAURANT_RESIDENCE.value,
+}
+
+PRODUCT_COMPANY_TYPES = {
+    CompanyType.PRODUCER.value,
+    CompanyType.SUPPLIER.value,
+    CompanyType.GOODS_SUPPLIER.value,
+    CompanyType.AGRO_LIVESTOCK.value,
+}
 
 
 class CompanyStatus(str, enum.Enum):
@@ -76,6 +108,11 @@ class NotificationType(str, enum.Enum):
     SYSTEM = "system"
 
 
+class RestaurantMenuItemType(str, enum.Enum):
+    FOOD = "food"
+    DRINK = "drink"
+
+
 class User(Base):
     __tablename__ = "users"
 
@@ -102,6 +139,7 @@ class User(Base):
     leads = relationship("PartnerLead", back_populates="requester")
     notifications = relationship("Notification", back_populates="user", cascade="all, delete-orphan")
     company_likes = relationship("CompanyLike", back_populates="user", cascade="all, delete-orphan")
+    product_likes = relationship("ProductLike", back_populates="user", cascade="all, delete-orphan")
     company_follows = relationship("CompanyFollow", back_populates="user", cascade="all, delete-orphan")
     company_comments = relationship("CompanyComment", back_populates="user", cascade="all, delete-orphan")
 
@@ -165,11 +203,16 @@ class LodgingProfile(Base):
     rating = Column(DECIMAL(4, 2), nullable=True)
     badge = Column(String(120), nullable=True)
     amenities = Column(JSON, nullable=True)
+    gallery_images = Column(JSON, nullable=True)
+    beach_access = Column(Boolean, nullable=False, default=False)
+    check_in_time = Column(String(20), nullable=True)
+    check_out_time = Column(String(20), nullable=True)
     active = Column(Boolean, nullable=False, default=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
     company = relationship("Company", back_populates="lodging_profile")
+    rooms = relationship("LodgingRoom", back_populates="lodging_profile", cascade="all, delete-orphan")
 
 
 class ExperienceProfile(Base):
@@ -198,6 +241,7 @@ class RestaurantProfile(Base):
     likes_count = Column(Integer, nullable=False, default=0)
     rating = Column(DECIMAL(4, 2), nullable=True)
     menu_items = Column(JSON, nullable=True)
+    gallery_images = Column(JSON, nullable=True)
     active = Column(Boolean, nullable=False, default=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
@@ -232,7 +276,9 @@ class ProducerProduct(Base):
     id = Column(Integer, primary_key=True, index=True)
     producer_id = Column(Integer, ForeignKey("producer_profiles.id", ondelete="CASCADE"), nullable=False, index=True)
     name = Column(String(180), nullable=False)
-    price_label = Column(String(80), nullable=False)
+    slug = Column(String(220), unique=True, index=True, nullable=False)
+    # Some agro/pecuaria products are for showcase only (no public price).
+    price_label = Column(String(80), nullable=True)
     price_amount = Column(DECIMAL(14, 2), nullable=True)
     image_url = Column(String(255), nullable=True)
     category = Column(String(120), nullable=True, index=True)
@@ -242,6 +288,31 @@ class ProducerProduct(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
     producer = relationship("ProducerProfile", back_populates="products")
+    likes = relationship("ProductLike", back_populates="product", cascade="all, delete-orphan")
+
+
+class LodgingRoom(Base):
+    __tablename__ = "lodging_rooms"
+    __table_args__ = (
+        UniqueConstraint("lodging_profile_id", "name", name="uq_lodging_room_name"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    lodging_profile_id = Column(Integer, ForeignKey("lodging_profiles.id", ondelete="CASCADE"), nullable=False, index=True)
+    name = Column(String(180), nullable=False)
+    room_type = Column(String(80), nullable=True)
+    capacity = Column(Integer, nullable=False, default=1)
+    price_per_night = Column(DECIMAL(14, 2), nullable=False, default=0.00)
+    currency = Column(String(10), nullable=False, default="EUR")
+    total_units = Column(Integer, nullable=False, default=1)
+    amenities = Column(JSON, nullable=True)
+    images = Column(JSON, nullable=True)
+    short_description = Column(String(255), nullable=True)
+    active = Column(Boolean, nullable=False, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    lodging_profile = relationship("LodgingProfile", back_populates="rooms")
 
 
 class CompanyService(Base):
@@ -299,6 +370,21 @@ class CompanyLike(Base):
 
     user = relationship("User", back_populates="company_likes")
     company = relationship("Company", back_populates="likes")
+
+
+class ProductLike(Base):
+    __tablename__ = "product_likes"
+    __table_args__ = (
+        UniqueConstraint("user_id", "product_id", name="uq_product_like_user_product"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    product_id = Column(Integer, ForeignKey("producer_products.id", ondelete="CASCADE"), nullable=False, index=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    user = relationship("User", back_populates="product_likes")
+    product = relationship("ProducerProduct", back_populates="likes")
 
 
 class CompanyFollow(Base):

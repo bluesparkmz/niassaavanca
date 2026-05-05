@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session, joinedload
+from urllib.parse import quote_plus
 
 import models
 import schemmas
@@ -10,6 +11,17 @@ from database import get_db
 
 
 router = APIRouter(prefix="/catalog", tags=["catalog"])
+
+
+def _build_whatsapp_order_link(company: models.Company, product_name: str) -> str | None:
+    whatsapp = (company.whatsapp or "").strip()
+    if not whatsapp:
+        return None
+    digits = "".join(ch for ch in whatsapp if ch.isdigit())
+    if not digits:
+        return None
+    message = quote_plus(f"Olá, quero pedir o produto: {product_name}")
+    return f"https://wa.me/{digits}?text={message}"
 
 
 def _lodging_summary(profile: models.LodgingProfile) -> schemmas.LodgingSummary:
@@ -88,6 +100,22 @@ def _service_out(item: models.CompanyService) -> schemmas.CompanyServiceOut:
         image=item.image_url,
         category=item.category,
         short_description=item.short_description,
+    )
+
+
+def _lodging_room_out(item: models.LodgingRoom) -> schemmas.LodgingRoomOut:
+    return schemmas.LodgingRoomOut(
+        id=item.id,
+        name=item.name,
+        room_type=item.room_type,
+        capacity=item.capacity,
+        price_per_night=item.price_per_night,
+        currency=item.currency,
+        total_units=item.total_units,
+        amenities=list(item.amenities or []),
+        images=list(item.images or []),
+        short_description=item.short_description,
+        active=item.active,
     )
 
 
@@ -190,6 +218,27 @@ def _company_social_state(
     )
 
 
+def _product_social_state(
+    db: Session,
+    product_id: int,
+    current_user: models.User | None = None,
+) -> schemmas.ProductSocialState:
+    likes_count = db.query(models.ProductLike).filter(models.ProductLike.product_id == product_id).count()
+    liked_by_me = False
+    if current_user:
+        liked_by_me = (
+            db.query(models.ProductLike)
+            .filter(models.ProductLike.product_id == product_id, models.ProductLike.user_id == current_user.id)
+            .first()
+            is not None
+        )
+    return schemmas.ProductSocialState(
+        product_id=product_id,
+        likes_count=likes_count,
+        liked_by_me=liked_by_me,
+    )
+
+
 @router.get("/home", response_model=schemmas.HomeResponse)
 def home(db: Session = Depends(get_db)):
     lodgings = (
@@ -278,6 +327,11 @@ def get_lodging(slug: str, db: Session = Depends(get_db)):
         **summary.model_dump(),
         description=item.company.description,
         amenities=list(item.amenities or []),
+        gallery_images=list(item.gallery_images or []),
+        beach_access=item.beach_access,
+        check_in_time=item.check_in_time,
+        check_out_time=item.check_out_time,
+        rooms=[_lodging_room_out(room) for room in item.rooms if room.active],
         services=services,
     )
 
@@ -338,7 +392,13 @@ def get_restaurant(slug: str, db: Session = Depends(get_db)):
     summary = _restaurant_summary(item)
     menu = [schemmas.RestaurantMenuItem(**entry) for entry in (item.menu_items or [])]
     services = [_service_out(service) for service in item.company.services if service.active]
-    return schemmas.RestaurantDetail(**summary.model_dump(), description=item.company.description, menu=menu, services=services)
+    return schemmas.RestaurantDetail(
+        **summary.model_dump(),
+        description=item.company.description,
+        gallery_images=list(item.gallery_images or []),
+        menu=menu,
+        services=services,
+    )
 
 
 @router.get("/producers", response_model=list[schemmas.ProducerSummary])
@@ -384,6 +444,7 @@ def get_producer(slug: str, db: Session = Depends(get_db)):
         schemmas.ProducerProductOut(
             id=product.id,
             name=product.name,
+            slug=product.slug,
             price=product.price_label,
             price_amount=product.price_amount,
             image=product.image_url,
@@ -409,6 +470,7 @@ def list_market_products(
     area: str | None = Query(default=None),
     q: str | None = Query(default=None),
     db: Session = Depends(get_db),
+    current_user: models.User | None = Depends(get_current_user_optional),
 ):
     query = (
         db.query(models.ProducerProduct)
@@ -434,18 +496,64 @@ def list_market_products(
             )
         )
     items = query.order_by(models.Company.is_verified.desc(), models.Company.is_featured.desc()).all()
-    return [
-        schemmas.MarketProductOut(
-            id=item.id,
-            name=item.name,
-            price=item.price_label,
-            price_amount=item.price_amount,
-            image=item.image_url,
-            category=item.category,
-            producer=_producer_summary(item.producer),
+    output: list[schemmas.MarketProductOut] = []
+    for item in items:
+        social = _product_social_state(db, item.id, current_user)
+        output.append(
+            schemmas.MarketProductOut(
+                id=item.id,
+                name=item.name,
+                slug=item.slug,
+                price=item.price_label,
+                price_amount=item.price_amount,
+                image=item.image_url,
+                category=item.category,
+                producer=_producer_summary(item.producer),
+                seller_whatsapp=item.producer.company.whatsapp,
+                whatsapp_order_link=_build_whatsapp_order_link(item.producer.company, item.name),
+                likes_count=social.likes_count,
+                liked_by_me=social.liked_by_me,
+            )
         )
-        for item in items
-    ]
+    return output
+
+
+@router.get("/market/products/{slug}", response_model=schemmas.MarketProductDetailOut)
+def get_market_product(
+    slug: str,
+    db: Session = Depends(get_db),
+    current_user: models.User | None = Depends(get_current_user_optional),
+):
+    item = (
+        db.query(models.ProducerProduct)
+        .join(models.ProducerProfile)
+        .join(models.Company)
+        .options(joinedload(models.ProducerProduct.producer).joinedload(models.ProducerProfile.company))
+        .filter(
+            models.ProducerProduct.slug == slug,
+            models.ProducerProduct.active == True,
+            models.ProducerProfile.active == True,
+        )
+        .first()
+    )
+    if not item:
+        raise HTTPException(status_code=404, detail="Produto nao encontrado")
+    social = _product_social_state(db, item.id, current_user)
+    return schemmas.MarketProductDetailOut(
+        id=item.id,
+        name=item.name,
+        slug=item.slug,
+        price=item.price_label,
+        price_amount=item.price_amount,
+        image=item.image_url,
+        category=item.category,
+        producer=_producer_summary(item.producer),
+        seller_whatsapp=item.producer.company.whatsapp,
+        whatsapp_order_link=_build_whatsapp_order_link(item.producer.company, item.name),
+        likes_count=social.likes_count,
+        liked_by_me=social.liked_by_me,
+        description=item.short_description,
+    )
 
 
 @router.get("/favorites", response_model=list[schemmas.FavoriteOut])
@@ -491,15 +599,54 @@ def list_my_favorite_collection(
             schemmas.MarketProductOut(
                 id=item.id,
                 name=item.name,
+                slug=item.slug,
                 price=item.price_label,
                 price_amount=item.price_amount,
                 image=item.image_url,
                 category=item.category,
                 producer=_producer_summary(item.producer),
+                seller_whatsapp=item.producer.company.whatsapp,
+                whatsapp_order_link=_build_whatsapp_order_link(item.producer.company, item.name),
+                likes_count=_product_social_state(db, item.id, current_user).likes_count,
+                liked_by_me=_product_social_state(db, item.id, current_user).liked_by_me,
             )
             for item in products
         ],
     )
+
+
+@router.get("/products/{product_id}/social", response_model=schemmas.ProductSocialState)
+def get_product_social_state(
+    product_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User | None = Depends(get_current_user_optional),
+):
+    product = db.query(models.ProducerProduct).filter(models.ProducerProduct.id == product_id).first()
+    if not product:
+        raise HTTPException(status_code=404, detail="Produto nao encontrado")
+    return _product_social_state(db, product_id, current_user)
+
+
+@router.post("/products/{product_id}/like", response_model=schemmas.ProductSocialState)
+def toggle_product_like(
+    product_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    product = db.query(models.ProducerProduct).filter(models.ProducerProduct.id == product_id).first()
+    if not product:
+        raise HTTPException(status_code=404, detail="Produto nao encontrado")
+    existing = (
+        db.query(models.ProductLike)
+        .filter(models.ProductLike.product_id == product_id, models.ProductLike.user_id == current_user.id)
+        .first()
+    )
+    if existing:
+        db.delete(existing)
+    else:
+        db.add(models.ProductLike(product_id=product_id, user_id=current_user.id))
+    db.commit()
+    return _product_social_state(db, product_id, current_user)
 
 
 @router.get("/companies/{company_id}/social", response_model=schemmas.CompanySocialState)

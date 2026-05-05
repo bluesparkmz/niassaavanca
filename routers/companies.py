@@ -8,6 +8,10 @@ import schemmas
 from auth import get_current_user
 from controllers.notifications import create_notification
 from controllers.storage_manager import COMPANIES_FOLDER, storage_manager
+
+
+RESTAURANT_MENU_FOLDER = f"{COMPANIES_FOLDER}/restaurant-menu"
+RESTAURANT_GALLERY_FOLDER = f"{COMPANIES_FOLDER}/restaurant-gallery"
 from database import get_db
 
 
@@ -60,10 +64,27 @@ def _service_out(item: models.CompanyService) -> schemmas.CompanyServiceOut:
     )
 
 
+def _lodging_room_out(item: models.LodgingRoom) -> schemmas.LodgingRoomOut:
+    return schemmas.LodgingRoomOut(
+        id=item.id,
+        name=item.name,
+        room_type=item.room_type,
+        capacity=item.capacity,
+        price_per_night=item.price_per_night,
+        currency=item.currency,
+        total_units=item.total_units,
+        amenities=list(item.amenities or []),
+        images=list(item.images or []),
+        short_description=item.short_description,
+        active=item.active,
+    )
+
+
 def _product_out(item: models.ProducerProduct) -> schemmas.ProducerProductOut:
     return schemmas.ProducerProductOut(
         id=item.id,
         name=item.name,
+        slug=item.slug,
         price=item.price_label,
         price_amount=item.price_amount,
         image=item.image_url,
@@ -141,6 +162,15 @@ def _slugify(text: str) -> str:
     return "-".join(text.strip().lower().split())
 
 
+def _ensure_unique_product_slug(db: Session, slug: str) -> str:
+    final_slug = slug
+    index = 2
+    while db.query(models.ProducerProduct).filter(models.ProducerProduct.slug == final_slug).first():
+        final_slug = f"{slug}-{index}"
+        index += 1
+    return final_slug
+
+
 def _ensure_unique_slug(db: Session, slug: str) -> str:
     final_slug = slug
     index = 2
@@ -150,9 +180,27 @@ def _ensure_unique_slug(db: Session, slug: str) -> str:
     return final_slug
 
 
+def _ensure_company_producer_profile(db: Session, company: models.Company) -> models.ProducerProfile:
+    if company.producer_profile:
+        return company.producer_profile
+    profile = models.ProducerProfile(
+        company_id=company.id,
+        area=company.category or company.location or "Negócio local",
+        rating=None,
+        sales_count=0,
+        story_quote=None,
+        social_links=[],
+        active=True,
+    )
+    db.add(profile)
+    db.flush()
+    company.producer_profile = profile
+    return profile
+
+
 def _create_company_profile(db: Session, company: models.Company, payload: schemmas.CompanyCreate) -> None:
     company_type = _company_type_value(payload)
-    if company_type in {models.CompanyType.LODGING.value, models.CompanyType.HOSPITALITY.value, models.CompanyType.BEACH.value}:
+    if company_type in models.LODGING_COMPANY_TYPES:
         db.add(
             models.LodgingProfile(
                 company_id=company.id,
@@ -162,9 +210,13 @@ def _create_company_profile(db: Session, company: models.Company, payload: schem
                 rating=payload.rating,
                 badge=payload.badge,
                 amenities=payload.amenities or [],
+                gallery_images=payload.gallery_images or [],
+                beach_access=payload.beach_access,
+                check_in_time=payload.check_in_time,
+                check_out_time=payload.check_out_time,
             )
         )
-    elif company_type == models.CompanyType.EXPERIENCE.value:
+    if company_type in models.EXPERIENCE_COMPANY_TYPES:
         db.add(
             models.ExperienceProfile(
                 company_id=company.id,
@@ -174,7 +226,7 @@ def _create_company_profile(db: Session, company: models.Company, payload: schem
                 category_label=payload.category_label or payload.category or "Experiência",
             )
         )
-    elif company_type == models.CompanyType.RESTAURANT.value:
+    if company_type in models.RESTAURANT_COMPANY_TYPES:
         db.add(
             models.RestaurantProfile(
                 company_id=company.id,
@@ -182,9 +234,10 @@ def _create_company_profile(db: Session, company: models.Company, payload: schem
                 signature=payload.signature,
                 rating=payload.rating,
                 menu_items=[item.model_dump() for item in payload.menu_items],
+                gallery_images=payload.restaurant_gallery_images or [],
             )
         )
-    elif company_type in {models.CompanyType.PRODUCER.value, models.CompanyType.SUPPLIER.value}:
+    if company_type in models.PRODUCT_COMPANY_TYPES:
         producer = models.ProducerProfile(
             company_id=company.id,
             area=payload.area or payload.category or "Produtor",
@@ -200,6 +253,7 @@ def _create_company_profile(db: Session, company: models.Company, payload: schem
                 models.ProducerProduct(
                     producer_id=producer.id,
                     name=item.name,
+                    slug=_ensure_unique_product_slug(db, _slugify(item.name)),
                     price_label=item.price_label,
                     price_amount=item.price_amount,
                     image_url=item.image_url,
@@ -330,6 +384,86 @@ def update_lodging_profile(
     db.commit()
     db.refresh(company)
     return _company_out(company)
+
+
+@router.get("/{company_id}/rooms", response_model=list[schemmas.LodgingRoomOut])
+def list_lodging_rooms(
+    company_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    company = _owned_company(db, company_id, current_user)
+    if not company.lodging_profile:
+        raise HTTPException(status_code=400, detail="Empresa sem perfil de alojamento")
+    return [_lodging_room_out(item) for item in company.lodging_profile.rooms if item.active]
+
+
+@router.post("/{company_id}/rooms", response_model=schemmas.LodgingRoomOut)
+def create_lodging_room(
+    company_id: int,
+    payload: schemmas.LodgingRoomIn,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    company = _owned_company(db, company_id, current_user)
+    if not company.lodging_profile:
+        raise HTTPException(status_code=400, detail="Empresa sem perfil de alojamento")
+    room = models.LodgingRoom(
+        lodging_profile_id=company.lodging_profile.id,
+        name=payload.name.strip(),
+        room_type=payload.room_type,
+        capacity=payload.capacity,
+        price_per_night=payload.price_per_night,
+        currency=payload.currency,
+        total_units=payload.total_units,
+        amenities=payload.amenities,
+        images=payload.images,
+        short_description=payload.short_description,
+        active=True,
+    )
+    db.add(room)
+    db.commit()
+    db.refresh(room)
+    return _lodging_room_out(room)
+
+
+@router.put("/{company_id}/rooms/{room_id}", response_model=schemmas.LodgingRoomOut)
+def update_lodging_room(
+    company_id: int,
+    room_id: int,
+    payload: schemmas.LodgingRoomUpdate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    company = _owned_company(db, company_id, current_user)
+    if not company.lodging_profile:
+        raise HTTPException(status_code=400, detail="Empresa sem perfil de alojamento")
+    room = next((item for item in company.lodging_profile.rooms if item.id == room_id), None)
+    if not room:
+        raise HTTPException(status_code=404, detail="Quarto nao encontrado")
+    for key, value in payload.model_dump(exclude_unset=True).items():
+        setattr(room, key, value)
+    db.commit()
+    db.refresh(room)
+    return _lodging_room_out(room)
+
+
+@router.delete("/{company_id}/rooms/{room_id}")
+def delete_lodging_room(
+    company_id: int,
+    room_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    company = _owned_company(db, company_id, current_user)
+    if not company.lodging_profile:
+        raise HTTPException(status_code=400, detail="Empresa sem perfil de alojamento")
+    room = next((item for item in company.lodging_profile.rooms if item.id == room_id), None)
+    if not room:
+        raise HTTPException(status_code=404, detail="Quarto nao encontrado")
+    db.delete(room)
+    db.commit()
+    return {"status": "ok"}
 
 
 @router.patch("/{company_id}/experience-profile", response_model=schemmas.CompanyOut)
@@ -584,13 +718,35 @@ async def upload_restaurant_menu_item_image(
     
     url = await storage_manager.upload_file(
         file,
-        COMPANIES_FOLDER,
+        RESTAURANT_MENU_FOLDER,
         allowed_mime_prefixes=("image/",),
     )
     items[index]["image"] = url
     company.restaurant_profile.menu_items = items
     db.commit()
     return {"url": url}
+
+
+@router.post("/{company_id}/restaurant-gallery/upload-image")
+async def upload_restaurant_gallery_image(
+    company_id: int,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    company = _owned_company(db, company_id, current_user)
+    if not company.restaurant_profile:
+        raise HTTPException(status_code=400, detail="Empresa sem perfil de restaurante")
+    url = await storage_manager.upload_file(
+        file,
+        RESTAURANT_GALLERY_FOLDER,
+        allowed_mime_prefixes=("image/",),
+    )
+    gallery = list(company.restaurant_profile.gallery_images or [])
+    gallery.append(url)
+    company.restaurant_profile.gallery_images = gallery
+    db.commit()
+    return {"url": url, "gallery_images": gallery}
 
 
 @router.post("/{company_id}/services", response_model=schemmas.CompanyServiceOut)
@@ -677,11 +833,11 @@ def create_company_product(
     current_user: models.User = Depends(get_current_user),
 ):
     company = _owned_company(db, company_id, current_user)
-    if not company.producer_profile:
-        raise HTTPException(status_code=400, detail="Esta empresa nao suporta produtos de mercado")
+    profile = _ensure_company_producer_profile(db, company)
     item = models.ProducerProduct(
-        producer_id=company.producer_profile.id,
+        producer_id=profile.id,
         name=payload.name.strip(),
+        slug=_ensure_unique_product_slug(db, _slugify(payload.name)),
         price_label=payload.price_label,
         price_amount=payload.price_amount,
         image_url=payload.image_url,
@@ -703,7 +859,7 @@ def delete_company_product(
 ):
     company = _owned_company(db, company_id, current_user)
     if not company.producer_profile:
-        raise HTTPException(status_code=400, detail="Esta empresa nao suporta produtos de mercado")
+        raise HTTPException(status_code=400, detail="Empresa sem produtos no mercado")
     item = next((product for product in company.producer_profile.products if product.id == product_id), None)
     if not item:
         raise HTTPException(status_code=404, detail="Produto nao encontrado")
@@ -722,7 +878,7 @@ def update_company_product(
 ):
     company = _owned_company(db, company_id, current_user)
     if not company.producer_profile:
-        raise HTTPException(status_code=400, detail="Esta empresa nao suporta produtos de mercado")
+        raise HTTPException(status_code=400, detail="Empresa sem produtos no mercado")
     item = next((product for product in company.producer_profile.products if product.id == product_id), None)
     if not item:
         raise HTTPException(status_code=404, detail="Produto nao encontrado")
@@ -731,6 +887,9 @@ def update_company_product(
     for key, value in data.items():
         if key == "image_url":
             item.image_url = value
+        elif key == "name" and value:
+            item.name = value
+            item.slug = _ensure_unique_product_slug(db, _slugify(value))
         else:
             setattr(item, key, value)
             

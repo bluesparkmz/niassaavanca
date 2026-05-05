@@ -161,6 +161,7 @@ def add_producer(db, owner):
         ProducerProduct(
             producer_id=producer.id,
             name="Cesto bordado tradicional",
+            slug="cesto-bordado-tradicional",
             price_label="MZN 850",
             category="Artesanato",
         )
@@ -169,6 +170,7 @@ def add_producer(db, owner):
         ProducerProduct(
             producer_id=producer.id,
             name="Capulana pintada à mão",
+            slug="capulana-pintada-a-mao",
             price_label="MZN 1.200",
             category="Artesanato",
         )
