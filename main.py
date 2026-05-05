@@ -119,13 +119,14 @@ def _ensure_admin_user() -> None:
             )
             db.add(user)
             db.commit()
-            logger.info("Created admin user: %s", ADMIN_EMAIL)
+            logger.info("Created admin user: %s (role=%s, is_admin=%s)", ADMIN_EMAIL, user.role.value if hasattr(user.role, "value") else str(user.role), user.is_admin)
         else:
+            logger.info("Found existing user: %s (role=%s, is_admin=%s)", ADMIN_EMAIL, user.role.value if hasattr(user.role, "value") else str(user.role), user.is_admin)
             if user.role != models.UserRole.ADMIN or not user.is_admin:
                 user.role = models.UserRole.ADMIN
                 user.is_admin = True
                 db.commit()
-                logger.info("Updated user to admin: %s", ADMIN_EMAIL)
+                logger.info("Updated user to admin: %s (role=%s, is_admin=%s)", ADMIN_EMAIL, user.role.value if hasattr(user.role, "value") else str(user.role), user.is_admin)
     except Exception as e:
         logger.warning("Could not ensure admin user: %s", e)
     finally:
