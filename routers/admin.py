@@ -4,7 +4,8 @@ import secrets
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
-from sqlalchemy.orm import Session
+from sqlalchemy import func
+from sqlalchemy.orm import Session, joinedload
 
 import models
 import schemmas
@@ -195,3 +196,262 @@ def admin_update_company(
     db.commit()
     db.refresh(company)
     return _company_out(company)
+
+
+# --------------- Stats ---------------
+
+@router.get("/stats")
+def admin_stats(
+    db: Session = Depends(get_db),
+    _: models.User = Depends(_require_admin),
+):
+    total_users = db.query(func.count(models.User.id)).scalar() or 0
+    total_companies = db.query(func.count(models.Company.id)).scalar() or 0
+    total_products = db.query(func.count(models.ProducerProduct.id)).scalar() or 0
+    total_services = db.query(func.count(models.CompanyService.id)).scalar() or 0
+    total_leads = db.query(func.count(models.PartnerLead.id)).scalar() or 0
+    pending_companies = (
+        db.query(func.count(models.Company.id))
+        .filter(models.Company.status == models.CompanyStatus.PENDING)
+        .scalar()
+        or 0
+    )
+    approved_companies = (
+        db.query(func.count(models.Company.id))
+        .filter(models.Company.status == models.CompanyStatus.APPROVED)
+        .scalar()
+        or 0
+    )
+    companies_by_type = (
+        db.query(models.Company.company_type, func.count(models.Company.id))
+        .group_by(models.Company.company_type)
+        .all()
+    )
+    return {
+        "total_users": total_users,
+        "total_companies": total_companies,
+        "total_products": total_products,
+        "total_services": total_services,
+        "total_leads": total_leads,
+        "pending_companies": pending_companies,
+        "approved_companies": approved_companies,
+        "companies_by_type": {
+            (t.value if hasattr(t, "value") else str(t)): c for t, c in companies_by_type
+        },
+    }
+
+
+# --------------- Users ---------------
+
+@router.get("/users")
+def admin_list_users(
+    db: Session = Depends(get_db),
+    _: models.User = Depends(_require_admin),
+):
+    users = db.query(models.User).order_by(models.User.created_at.desc()).all()
+    result = []
+    for u in users:
+        company_count = db.query(func.count(models.Company.id)).filter(models.Company.owner_user_id == u.id).scalar() or 0
+        result.append({
+            "id": u.id,
+            "full_name": u.full_name,
+            "email": u.email,
+            "phone": u.phone,
+            "role": u.role.value if hasattr(u.role, "value") else str(u.role),
+            "is_admin": u.is_admin,
+            "is_active": u.is_active,
+            "created_at": u.created_at.isoformat() if u.created_at else None,
+            "companies_count": company_count,
+        })
+    return result
+
+
+@router.get("/users/{user_id}")
+def admin_get_user(
+    user_id: int,
+    db: Session = Depends(get_db),
+    _: models.User = Depends(_require_admin),
+):
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Utilizador nao encontrado")
+    companies = db.query(models.Company).filter(models.Company.owner_user_id == user.id).all()
+    return {
+        "id": user.id,
+        "full_name": user.full_name,
+        "email": user.email,
+        "phone": user.phone,
+        "role": user.role.value if hasattr(user.role, "value") else str(user.role),
+        "is_admin": user.is_admin,
+        "is_active": user.is_active,
+        "created_at": user.created_at.isoformat() if user.created_at else None,
+        "companies": [_company_out(c) for c in companies],
+    }
+
+
+# --------------- Company detail with products/services ---------------
+
+@router.get("/companies/{company_id}/detail")
+def admin_company_detail(
+    company_id: int,
+    db: Session = Depends(get_db),
+    _: models.User = Depends(_require_admin),
+):
+    company = (
+        db.query(models.Company)
+        .options(
+            joinedload(models.Company.owner),
+            joinedload(models.Company.services),
+            joinedload(models.Company.producer_profile),
+            joinedload(models.Company.restaurant_profile),
+            joinedload(models.Company.lodging_profile),
+        )
+        .filter(models.Company.id == company_id)
+        .first()
+    )
+    if not company:
+        raise HTTPException(status_code=404, detail="Empresa nao encontrada")
+
+    products = []
+    if company.producer_profile:
+        for p in company.producer_profile.products:
+            products.append({
+                "id": p.id,
+                "name": p.name,
+                "price_label": p.price_label,
+                "price_amount": str(p.price_amount) if p.price_amount else None,
+                "image_url": p.image_url,
+                "category": p.category,
+                "short_description": p.short_description,
+                "active": p.active,
+            })
+
+    services = []
+    for s in company.services:
+        services.append({
+            "id": s.id,
+            "name": s.name,
+            "price_label": s.price_label,
+            "price_amount": str(s.price_amount) if s.price_amount else None,
+            "image_url": s.image_url,
+            "category": s.category,
+            "short_description": s.short_description,
+            "active": s.active,
+        })
+
+    rooms = []
+    if company.lodging_profile:
+        for r in company.lodging_profile.rooms:
+            rooms.append({
+                "id": r.id,
+                "name": r.name,
+                "room_type": r.room_type,
+                "capacity": r.capacity,
+                "price_per_night": str(r.price_per_night),
+                "currency": r.currency,
+                "total_units": r.total_units,
+                "active": r.active,
+            })
+
+    menu_items = []
+    if company.restaurant_profile and company.restaurant_profile.menu_items:
+        menu_items = company.restaurant_profile.menu_items
+
+    leads_count = db.query(func.count(models.PartnerLead.id)).filter(models.PartnerLead.company_id == company.id).scalar() or 0
+
+    return {
+        "company": _company_out(company),
+        "owner": {
+            "id": company.owner.id,
+            "full_name": company.owner.full_name,
+            "email": company.owner.email,
+            "phone": company.owner.phone,
+        } if company.owner else None,
+        "products": products,
+        "services": services,
+        "rooms": rooms,
+        "menu_items": menu_items,
+        "leads_count": leads_count,
+    }
+
+
+# --------------- Create product inside company ---------------
+
+@router.post("/companies/{company_id}/products", status_code=status.HTTP_201_CREATED)
+def admin_create_product(
+    company_id: int,
+    payload: schemmas.ProductIn,
+    db: Session = Depends(get_db),
+    _: models.User = Depends(_require_admin),
+):
+    company = db.query(models.Company).filter(models.Company.id == company_id).first()
+    if not company:
+        raise HTTPException(status_code=404, detail="Empresa nao encontrada")
+    if not company.producer_profile:
+        raise HTTPException(status_code=400, detail="Empresa nao tem perfil de produtor")
+
+    base_slug = _slugify(payload.name)
+    slug = base_slug
+    idx = 2
+    while db.query(models.ProducerProduct).filter(models.ProducerProduct.slug == slug).first():
+        slug = f"{base_slug}-{idx}"
+        idx += 1
+    product = models.ProducerProduct(
+        producer_id=company.producer_profile.id,
+        name=payload.name.strip(),
+        slug=slug,
+        price_label=payload.price_label,
+        price_amount=payload.price_amount,
+        image_url=payload.image_url,
+        category=payload.category,
+        short_description=payload.short_description,
+    )
+    db.add(product)
+    db.commit()
+    db.refresh(product)
+    return {
+        "id": product.id,
+        "name": product.name,
+        "slug": product.slug,
+        "price_label": product.price_label,
+        "price_amount": str(product.price_amount) if product.price_amount else None,
+        "image_url": product.image_url,
+        "category": product.category,
+        "short_description": product.short_description,
+    }
+
+
+# --------------- Create service inside company ---------------
+
+@router.post("/companies/{company_id}/services", status_code=status.HTTP_201_CREATED)
+def admin_create_service(
+    company_id: int,
+    payload: schemmas.ServiceIn,
+    db: Session = Depends(get_db),
+    _: models.User = Depends(_require_admin),
+):
+    company = db.query(models.Company).filter(models.Company.id == company_id).first()
+    if not company:
+        raise HTTPException(status_code=404, detail="Empresa nao encontrada")
+
+    service = models.CompanyService(
+        company_id=company.id,
+        name=payload.name.strip(),
+        price_label=payload.price_label,
+        price_amount=payload.price_amount,
+        image_url=payload.image_url,
+        category=payload.category,
+        short_description=payload.short_description,
+    )
+    db.add(service)
+    db.commit()
+    db.refresh(service)
+    return {
+        "id": service.id,
+        "name": service.name,
+        "price_label": service.price_label,
+        "price_amount": str(service.price_amount) if service.price_amount else None,
+        "image_url": service.image_url,
+        "category": service.category,
+        "short_description": service.short_description,
+    }
