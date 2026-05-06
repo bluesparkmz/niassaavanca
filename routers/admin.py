@@ -47,19 +47,24 @@ def _ensure_unique_username(db: Session, username: str) -> str:
     return candidate
 
 
+def _generate_password(length: int = 8) -> str:
+    import string
+    alphabet = string.ascii_letters + string.digits
+    return "".join(secrets.choice(alphabet) for _ in range(length))
+
+
 def _get_or_create_owner_user(
     db: Session,
     email: str,
     full_name: str | None,
     phone: str | None,
-    password: str | None,
 ) -> tuple[models.User, str | None]:
     normalized_email = email.lower().strip()
     user = db.query(models.User).filter(models.User.email == normalized_email).first()
     if user:
         return user, None
 
-    temp_password = password or secrets.token_urlsafe(12)
+    generated_password = _generate_password(8)
     username_seed = normalized_email.split("@")[0]
 
     user = models.User(
@@ -68,21 +73,20 @@ def _get_or_create_owner_user(
         full_name=(full_name or username_seed).strip(),
         email=normalized_email,
         phone=(phone or "").strip() or None,
-        password_hash=get_password_hash(temp_password),
+        password_hash=get_password_hash(generated_password),
         role=models.UserRole.PARTNER,
         is_active=True,
         is_admin=False,
     )
     db.add(user)
     db.flush()
-    return user, (None if password else temp_password)
+    return user, generated_password
 
 
 class AdminOwnerIn(BaseModel):
     email: str = Field(..., max_length=140)
     full_name: str | None = Field(default=None, max_length=140)
     phone: str | None = Field(default=None, max_length=30)
-    password: str | None = Field(default=None, min_length=4)
 
 
 class AdminCreateCompanyIn(BaseModel):
@@ -93,7 +97,8 @@ class AdminCreateCompanyIn(BaseModel):
 class AdminCreateCompanyOut(BaseModel):
     owner_user: schemmas.UserOut
     company: schemmas.CompanyOut
-    owner_temp_password: str | None = None
+    owner_temp_password: str
+    is_new_user: bool = True
 
 
 @router.post("/companies", response_model=AdminCreateCompanyOut, status_code=status.HTTP_201_CREATED)
@@ -107,7 +112,6 @@ def admin_create_company(
         email=str(payload.owner.email),
         full_name=payload.owner.full_name,
         phone=payload.owner.phone,
-        password=payload.owner.password,
     )
 
     company_slug = _ensure_unique_slug(db, _slugify(payload.company.name))
@@ -145,7 +149,8 @@ def admin_create_company(
     return AdminCreateCompanyOut(
         owner_user=schemmas.UserOut.model_validate(owner),
         company=_company_out(company),
-        owner_temp_password=temp_password,
+        owner_temp_password=temp_password or "",
+        is_new_user=temp_password is not None,
     )
 
 
@@ -455,3 +460,44 @@ def admin_create_service(
         "category": service.category,
         "short_description": service.short_description,
     }
+
+
+# --------------- Password management ---------------
+
+class AdminChangePasswordIn(BaseModel):
+    user_id: int
+    new_password: str = Field(..., min_length=4, max_length=128)
+
+
+class AdminResetPasswordIn(BaseModel):
+    user_id: int
+
+
+@router.post("/users/{user_id}/change-password")
+def admin_change_password(
+    user_id: int,
+    payload: AdminChangePasswordIn,
+    db: Session = Depends(get_db),
+    _: models.User = Depends(_require_admin),
+):
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Utilizador nao encontrado")
+    user.password_hash = get_password_hash(payload.new_password)
+    db.commit()
+    return {"detail": "Senha alterada com sucesso"}
+
+
+@router.post("/users/{user_id}/reset-password")
+def admin_reset_password(
+    user_id: int,
+    db: Session = Depends(get_db),
+    _: models.User = Depends(_require_admin),
+):
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Utilizador nao encontrado")
+    new_password = _generate_password(8)
+    user.password_hash = get_password_hash(new_password)
+    db.commit()
+    return {"new_password": new_password, "user_id": user.id, "email": user.email}
