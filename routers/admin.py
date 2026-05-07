@@ -205,6 +205,20 @@ def admin_update_company(
     return _company_out(company)
 
 
+@router.delete("/companies/{company_id}")
+def admin_delete_company(
+    company_id: int,
+    db: Session = Depends(get_db),
+    _: models.User = Depends(_require_admin),
+):
+    company = db.query(models.Company).filter(models.Company.id == company_id).first()
+    if not company:
+        raise HTTPException(status_code=404, detail="Empresa nao encontrada")
+    db.delete(company)
+    db.commit()
+    return {"detail": "Empresa removida com sucesso"}
+
+
 # --------------- Stats ---------------
 
 @router.get("/stats")
@@ -294,6 +308,22 @@ def admin_get_user(
         "created_at": user.created_at.isoformat() if user.created_at else None,
         "companies": [_company_out(c) for c in companies],
     }
+
+
+@router.delete("/users/{user_id}")
+def admin_delete_user(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(_require_admin),
+):
+    if user_id == current_user.id:
+        raise HTTPException(status_code=400, detail="Nao pode remover a sua propria conta admin")
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Utilizador nao encontrado")
+    db.delete(user)
+    db.commit()
+    return {"detail": "Utilizador removido com sucesso"}
 
 
 # --------------- Company detail with products/services ---------------
