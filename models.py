@@ -188,7 +188,7 @@ class Company(Base):
     restaurant_profile = relationship("RestaurantProfile", back_populates="company", uselist=False, cascade="all, delete-orphan")
     producer_profile = relationship("ProducerProfile", back_populates="company", uselist=False, cascade="all, delete-orphan")
     services = relationship("CompanyService", back_populates="company", cascade="all, delete-orphan")
-    favorites = relationship("Favorite", back_populates="company")
+    favorites = relationship("Favorite", back_populates="company", cascade="all, delete-orphan")
     leads = relationship("PartnerLead", back_populates="company", cascade="all, delete-orphan")
     selo_requests = relationship("SeloNiassaRequest", back_populates="company", cascade="all, delete-orphan")
     likes = relationship("CompanyLike", back_populates="company", cascade="all, delete-orphan")

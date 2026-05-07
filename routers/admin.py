@@ -214,6 +214,11 @@ def admin_delete_company(
     company = db.query(models.Company).filter(models.Company.id == company_id).first()
     if not company:
         raise HTTPException(status_code=404, detail="Empresa nao encontrada")
+    if company.producer_profile:
+        product_ids = [product.id for product in company.producer_profile.products]
+        if product_ids:
+            db.query(models.Favorite).filter(models.Favorite.product_id.in_(product_ids)).delete(synchronize_session=False)
+    db.query(models.Favorite).filter(models.Favorite.company_id == company_id).delete(synchronize_session=False)
     db.delete(company)
     db.commit()
     return {"detail": "Empresa removida com sucesso"}
