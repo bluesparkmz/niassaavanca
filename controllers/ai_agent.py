@@ -21,6 +21,8 @@ def search_companies(
     """
     Search for companies by name, type, or location.
     """
+    print(f"[AI Agent] search_companies called with query={query}, company_type={company_type}, location={location}, limit={limit}")
+    
     q = db.query(models.Company).filter(
         models.Company.status == models.CompanyStatus.APPROVED
     )
@@ -46,6 +48,7 @@ def search_companies(
         )
 
     results = q.limit(limit).all()
+    print(f"[AI Agent] search_companies found {len(results)} results")
     return [_company_to_dict(c) for c in results]
 
 
@@ -326,22 +329,30 @@ def extract_search_intent(message: str) -> tuple[str, dict[str, str]]:
     intent_types: 'companies', 'lodgings', 'restaurants', 'experiences', 'producers', 'products', None
     """
     lower = message.lower()
+    print(f"[AI Agent] Analyzing message: {message}")
     
-    # Detect intent patterns
-    if any(word in lower for word in ["hotel", "alojamento", "hospedagem", "acomodação", "pousada", "hostel", "alojamentos", "hotéis"]):
+    # Detect intent patterns - companies first (most general)
+    if any(word in lower for word in ["empresa", "negócio", "loja", "estabelecimento", "prestador", "empresas", "negócios", "lojas", "parceiro", "parceiros", "plataforma"]):
+        intent = "companies"
+        print(f"[AI Agent] Detected intent: companies")
+    elif any(word in lower for word in ["hotel", "alojamento", "hospedagem", "acomodação", "pousada", "hostel", "alojamentos", "hotéis", "ficar", "hospedar"]):
         intent = "lodgings"
+        print(f"[AI Agent] Detected intent: lodgings")
     elif any(word in lower for word in ["restaurante", "comer", "refeição", "comida", "refeicao", "prato", "prato típico", "comidas", "restaurantes", "café", "cafe"]):
         intent = "restaurants"
+        print(f"[AI Agent] Detected intent: restaurants")
     elif any(word in lower for word in ["experiência", "tour", "passeio", "atividade", "viagem", "turismo", "tours", "passeios", "atividades", "experiencias"]):
         intent = "experiences"
+        print(f"[AI Agent] Detected intent: experiences")
     elif any(word in lower for word in ["produtor", "agricultor", "fornecedor", "agrícola", "agraria", "produtores", "agricultores", "fornecedores"]):
         intent = "producers"
+        print(f"[AI Agent] Detected intent: producers")
     elif any(word in lower for word in ["produto", "mercado", "comprar", "venda", "produto", "produtos", "vender", "vende"]):
         intent = "products"
-    elif any(word in lower for word in ["empresa", "negócio", "loja", "estabelecimento", "prestador", "empresas", "negócios", "lojas"]):
-        intent = "companies"
+        print(f"[AI Agent] Detected intent: products")
     else:
         intent = None
+        print(f"[AI Agent] No intent detected")
     
     # Extract location if mentioned
     location_patterns = [
@@ -362,5 +373,6 @@ def extract_search_intent(message: str) -> tuple[str, dict[str, str]]:
     parameters = {}
     if location:
         parameters["location"] = location
+        print(f"[AI Agent] Extracted location: {location}")
     
     return intent, parameters
