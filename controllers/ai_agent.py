@@ -70,13 +70,39 @@ def search_lodgings(
     """
     Search for lodging companies (hotels, apartments, etc).
     """
-    return search_companies(
-        db,
-        query=query,
-        company_type="hotel",
-        location=location,
-        limit=limit,
+    q = db.query(models.Company).filter(
+        and_(
+            models.Company.company_type.in_(
+                [
+                    models.CompanyType.HOTEL.value,
+                    models.CompanyType.LODGING.value,
+                    models.CompanyType.HOSPITALITY.value,
+                    models.CompanyType.BEACH.value,
+                    models.CompanyType.RESTAURANT_RESIDENCE.value,
+                ]
+            ),
+            models.Company.status == models.CompanyStatus.APPROVED,
+        )
     )
+
+    if query:
+        q = q.filter(
+            or_(
+                models.Company.name.ilike(f"%{query}%"),
+                models.Company.description.ilike(f"%{query}%"),
+            )
+        )
+
+    if location:
+        q = q.filter(
+            or_(
+                models.Company.location.ilike(f"%{location}%"),
+                models.Company.district.ilike(f"%{location}%"),
+            )
+        )
+
+    results = q.limit(limit).all()
+    return [_company_to_dict(c) for c in results]
 
 
 def search_restaurants(
