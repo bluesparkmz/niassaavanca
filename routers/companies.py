@@ -638,6 +638,7 @@ async def upload_company_logo(
         allowed_mime_prefixes=("image/",),
     )
     db.commit()
+    db.refresh(company)
     return {"url": company.logo_url}
 
 
@@ -655,6 +656,7 @@ async def upload_company_cover(
         allowed_mime_prefixes=("image/",),
     )
     db.commit()
+    db.refresh(company)
     return {"url": company.cover_url}
 
 
