@@ -158,7 +158,7 @@ def _owned_company(
     company_id: int,
     current_user: models.User,
 ) -> models.Company:
-    company = (
+    query = (
         db.query(models.Company)
         .options(
             joinedload(models.Company.producer_profile).joinedload(models.ProducerProfile.products),
@@ -166,9 +166,13 @@ def _owned_company(
             joinedload(models.Company.leads),
             joinedload(models.Company.selo_requests),
         )
-        .filter(models.Company.id == company_id, models.Company.owner_user_id == current_user.id)
-        .first()
+        .filter(models.Company.id == company_id)
     )
+
+    if not _is_admin(current_user):
+        query = query.filter(models.Company.owner_user_id == current_user.id)
+
+    company = query.first()
     if not company:
         raise HTTPException(status_code=404, detail="Empresa nao encontrada")
     return company
