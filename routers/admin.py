@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import secrets
 
-from fastapi import APIRouter, Depends, File, HTTPException, status, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, status, UploadFile, Body
 from pydantic import BaseModel, Field
 from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
@@ -1214,7 +1214,7 @@ class BulkSmsRequest(BaseModel):
 
 @router.post("/send-bulk-sms")
 def admin_send_bulk_sms(
-    payload: BulkSmsRequest,
+    payload: BulkSmsRequest = Body(...),
     _: models.User = Depends(_require_admin),
 ):
     """Enviar SMS em massa para marketing - admin only"""
