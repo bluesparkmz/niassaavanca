@@ -1210,7 +1210,6 @@ def admin_send_sms(
 class BulkSmsRequest(BaseModel):
     phones: list[str]
     message: str
-    sender_id: str = "AGVIAGEM"
 
 
 @router.post("/send-bulk-sms")
@@ -1222,7 +1221,7 @@ def admin_send_bulk_sms(
     from controllers.send_sms import send_sms
     results = []
     for phone in payload.phones:
-        result = send_sms(phone, payload.message, payload.sender_id)
+        result = send_sms(phone, payload.message)
         results.append({"phone": phone, "result": result})
     return {"total_sent": len(results), "results": results}
 
