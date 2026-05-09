@@ -883,11 +883,15 @@ async def create_partner_lead(
     
     # Enviar SMS para o proprietário do produto (empresa)
     phone_to_send = company.whatsapp or company.phone
+    print(f"DEBUG: Tentando enviar SMS. company.whatsapp={company.whatsapp}, company.phone={company.phone}, phone_to_send={phone_to_send}")
+    
     if phone_to_send:
         # Format phone number - remove non-digits and ensure country code
         digits = "".join(ch for ch in phone_to_send if ch.isdigit())
         if not digits.startswith("258"):
             digits = "258" + digits
+        
+        print(f"DEBUG: Telefone formatado: {digits}")
         
         # Create appropriate message based on lead type
         lead_type_label = "reserva" if payload.lead_type == models.LeadType.BOOKING.value else "pedido"
@@ -916,11 +920,16 @@ async def create_partner_lead(
         
         message = ". ".join(message_parts)
         
+        print(f"DEBUG: Mensagem SMS: {message}")
+        
         # Send SMS asynchronously (fire and forget)
         try:
-            send_sms(digits, message)
+            result = send_sms(digits, message)
+            print(f"DEBUG: SMS enviado com resultado: {result}")
         except Exception as e:
-            print(f"Erro ao enviar SMS: {e}")
+            print(f"DEBUG: Erro ao enviar SMS: {e}")
+    else:
+        print(f"DEBUG: Nao foi possivel enviar SMS - empresa sem telefone/whatsapp")
     
     return _lead_out(lead)
 
