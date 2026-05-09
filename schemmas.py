@@ -320,7 +320,7 @@ class ConferenceRoomIn(BaseModel):
     name: str = Field(..., min_length=2, max_length=180)
     room_type: Optional[str] = Field(default=None, max_length=80)
     capacity: int = Field(default=1, ge=1, le=50)
-    price_per_hour: Decimal = Field(default=0)
+    price_per_day: Decimal = Field(default=0)
     currency: str = Field(default="MZN", max_length=10)
     total_units: int = Field(default=1, ge=1, le=100)
     amenities: List[str] = Field(default_factory=list)
@@ -332,7 +332,7 @@ class ConferenceRoomUpdate(BaseModel):
     name: Optional[str] = Field(default=None, min_length=2, max_length=180)
     room_type: Optional[str] = Field(default=None, max_length=80)
     capacity: Optional[int] = Field(default=None, ge=1, le=50)
-    price_per_hour: Optional[Decimal] = None
+    price_per_day: Optional[Decimal] = None
     currency: Optional[str] = Field(default=None, max_length=10)
     total_units: Optional[int] = Field(default=None, ge=1, le=100)
     amenities: Optional[List[str]] = None
@@ -346,7 +346,7 @@ class ConferenceRoomOut(BaseModel):
     name: str
     room_type: Optional[str] = None
     capacity: int
-    price_per_hour: Decimal
+    price_per_day: Decimal
     currency: str
     total_units: int
     amenities: List[str] = []

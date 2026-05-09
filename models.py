@@ -331,7 +331,7 @@ class ConferenceRoom(Base):
     name = Column(String(180), nullable=False)
     room_type = Column(String(80), nullable=True)
     capacity = Column(Integer, nullable=False, default=1)
-    price_per_hour = Column(DECIMAL(14, 2), nullable=False, default=0.00)
+    price_per_day = Column(DECIMAL(14, 2), nullable=False, default=0.00)
     currency = Column(String(10), nullable=False, default="MZN")
     total_units = Column(Integer, nullable=False, default=1)
     amenities = Column(JSON, nullable=True)
