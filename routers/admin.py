@@ -1206,6 +1206,41 @@ def admin_send_sms(
     return result
 
 
+@router.post("/send-bulk-sms")
+def admin_send_bulk_sms(
+    phones: list[str],
+    message: str,
+    sender_id: str = "AGVIAGEM",
+    _: models.User = Depends(_require_admin),
+):
+    """Enviar SMS em massa para marketing - admin only"""
+    from controllers.send_sms import send_sms
+    results = []
+    for phone in phones:
+        result = send_sms(phone, message, sender_id)
+        results.append({"phone": phone, "result": result})
+    return {"total_sent": len(results), "results": results}
+
+
+@router.get("/users-with-phone")
+def admin_get_users_with_phone(
+    db: Session = Depends(get_db),
+    _: models.User = Depends(_require_admin),
+):
+    """Obter lista de usuários cadastrados com telefone - admin only"""
+    users = db.query(models.User).filter(models.User.phone.isnot(None)).all()
+    return [
+        {
+            "id": u.id,
+            "name": u.name,
+            "email": u.email,
+            "phone": u.phone,
+            "role": u.role.value,
+        }
+        for u in users
+    ]
+
+
 @router.post("/companies/{company_id}/conference-rooms/{room_id}/upload-image")
 async def admin_upload_conference_room_image(
     company_id: int,
