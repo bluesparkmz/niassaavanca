@@ -7,6 +7,7 @@ import models
 import schemmas
 from auth import get_current_user, get_current_user_optional
 from controllers.notifications import create_notification
+from controllers.send_sms import send_sms
 from database import get_db
 
 
@@ -841,14 +842,14 @@ async def create_partner_lead(
     company_id: int,
     payload: schemmas.LeadCreate,
     db: Session = Depends(get_db),
-    current_user: models.User | None = Depends(get_current_user_optional),
+    current_user: models.User = Depends(get_current_user),
 ):
     company = db.query(models.Company).filter(models.Company.id == company_id).first()
     if not company:
         raise HTTPException(status_code=404, detail="Empresa nao encontrada")
     lead = models.PartnerLead(
         company_id=company.id,
-        requester_user_id=current_user.id if current_user else None,
+        requester_user_id=current_user.id,
         lead_type=payload.lead_type,
         status=models.LeadStatus.NEW,
         customer_name=payload.customer_name,
@@ -878,13 +879,49 @@ async def create_partner_lead(
                 "lead_id": lead.id,
                 "lead_type": payload.lead_type,
             },
-    )
-        # Enviar SMS para o dono da empresa
-        owner = db.query(models.User).filter(models.User.id == owner_id).first()
-        if owner and owner.phone:
-            from controllers.send_sms import send_sms
-            message = f"Ola {owner.name}, recebeste um novo pedido de {payload.customer_name} para {company.name}. Contacte: {payload.customer_phone}"
-            send_sms(owner.phone, message)
+        )
+    
+    # Enviar SMS para o proprietário do produto (empresa)
+    phone_to_send = company.whatsapp or company.phone
+    if phone_to_send:
+        # Format phone number - remove non-digits and ensure country code
+        digits = "".join(ch for ch in phone_to_send if ch.isdigit())
+        if not digits.startswith("258"):
+            digits = "258" + digits
+        
+        # Create appropriate message based on lead type
+        lead_type_label = "reserva" if payload.lead_type == models.LeadType.BOOKING.value else "pedido"
+        message_parts = [
+            f"O usuario {current_user.full_name} fez uma nova {lead_type_label} no Niassa Avanca!",
+            f"Empresa: {company.name}"
+        ]
+        
+        if payload.customer_name:
+            message_parts.append(f"Nome: {payload.customer_name}")
+        
+        if payload.product_name:
+            message_parts.append(f"Produto: {payload.product_name}")
+        if payload.service_name:
+            message_parts.append(f"Servico: {payload.service_name}")
+        if payload.check_in_date and payload.check_out_date:
+            message_parts.append(f"Data: {payload.check_in_date} a {payload.check_out_date}")
+        if payload.guests_count:
+            message_parts.append(f"Hospedes: {payload.guests_count}")
+        if payload.quantity:
+            message_parts.append(f"Quantidade: {payload.quantity}")
+        if payload.customer_phone:
+            message_parts.append(f"Contacto: {payload.customer_phone}")
+        if payload.message:
+            message_parts.append(f"Mensagem: {payload.message[:100]}")
+        
+        message = ". ".join(message_parts)
+        
+        # Send SMS asynchronously (fire and forget)
+        try:
+            send_sms(digits, message)
+        except Exception as e:
+            print(f"Erro ao enviar SMS: {e}")
+    
     return _lead_out(lead)
 
 
@@ -893,7 +930,7 @@ async def create_booking_request(
     company_id: int,
     payload: schemmas.LeadCreate,
     db: Session = Depends(get_db),
-    current_user: models.User | None = Depends(get_current_user_optional),
+    current_user: models.User = Depends(get_current_user),
 ):
     booking_payload = payload.model_copy(update={"lead_type": models.LeadType.BOOKING.value})
     return await create_partner_lead(company_id, booking_payload, db, current_user)
