@@ -919,6 +919,52 @@ def admin_create_room(
     )
 
 
+@router.patch("/companies/{company_id}/rooms/{room_id}", response_model=schemmas.LodgingRoomOut)
+def admin_update_room(
+    company_id: int,
+    room_id: int,
+    payload: schemmas.LodgingRoomIn,
+    db: Session = Depends(get_db),
+    _: models.User = Depends(_require_admin),
+):
+    """Update a room for a company - admin only"""
+    company = db.query(models.Company).filter(models.Company.id == company_id).first()
+    if not company:
+        raise HTTPException(status_code=404, detail="Empresa nao encontrada")
+    if not company.lodging_profile:
+        raise HTTPException(status_code=400, detail="Empresa nao tem perfil de alojamento")
+
+    room = next((item for item in company.lodging_profile.rooms if item.id == room_id), None)
+    if not room:
+        raise HTTPException(status_code=404, detail="Quarto nao encontrado")
+
+    if payload.name is not None:
+        room.name = payload.name.strip()
+    if payload.room_type is not None:
+        room.room_type = payload.room_type
+    if payload.capacity is not None:
+        room.capacity = payload.capacity
+    if payload.price_per_night is not None:
+        room.price_per_night = payload.price_per_night
+    if payload.currency is not None:
+        room.currency = payload.currency
+    if payload.total_units is not None:
+        room.total_units = payload.total_units
+
+    db.commit()
+    db.refresh(room)
+    return schemmas.LodgingRoomOut(
+        id=room.id,
+        name=room.name,
+        room_type=room.room_type,
+        capacity=room.capacity,
+        price_per_night=str(room.price_per_night) if room.price_per_night else None,
+        currency=room.currency,
+        total_units=room.total_units,
+        active=room.active,
+    )
+
+
 @router.delete("/companies/{company_id}/rooms/{room_id}")
 def admin_delete_room(
     company_id: int,
