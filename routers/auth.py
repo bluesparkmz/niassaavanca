@@ -313,6 +313,11 @@ def register_user(payload: schemmas.UserCreate, db: Session = Depends(get_db)):
     db.add(user)
     db.commit()
     db.refresh(user)
+    # Enviar SMS de bem-vindo
+    if user.phone:
+        from controllers.send_sms import send_sms
+        message = f"Bem-vindo ao Niassa Avanca, {user.name}! Estamos felizes por ter voce connosco."
+        send_sms(user.phone, message)
     return user
 
 
@@ -362,6 +367,11 @@ def register_company(payload: schemmas.CompanySignupRequest, db: Session = Depen
 
     db.commit()
     db.refresh(user)
+    # Enviar SMS de bem-vindo
+    if user.phone:
+        from controllers.send_sms import send_sms
+        message = f"Bem-vindo ao Niassa Avanca, {user.name}! Sua empresa {company.name} foi cadastrada com sucesso."
+        send_sms(user.phone, message)
     return _build_auth_me(user)
 
 

@@ -1193,6 +1193,19 @@ def admin_delete_conference_room(
     return {"detail": "Sala de conferência eliminada"}
 
 
+@router.post("/send-sms")
+def admin_send_sms(
+    phone: str,
+    message: str,
+    sender_id: str = "AGVIAGEM",
+    _: models.User = Depends(_require_admin),
+):
+    """Enviar SMS manualmente - admin only"""
+    from controllers.send_sms import send_sms
+    result = send_sms(phone, message, sender_id)
+    return result
+
+
 @router.post("/companies/{company_id}/conference-rooms/{room_id}/upload-image")
 async def admin_upload_conference_room_image(
     company_id: int,

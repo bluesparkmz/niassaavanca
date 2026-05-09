@@ -879,6 +879,12 @@ async def create_partner_lead(
                 "lead_type": payload.lead_type,
             },
     )
+        # Enviar SMS para o dono da empresa
+        owner = db.query(models.User).filter(models.User.id == owner_id).first()
+        if owner and owner.phone:
+            from controllers.send_sms import send_sms
+            message = f"Ola {owner.name}, recebeste um novo pedido de {payload.customer_name} para {company.name}. Contacte: {payload.customer_phone}"
+            send_sms(owner.phone, message)
     return _lead_out(lead)
 
 
