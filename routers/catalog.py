@@ -907,14 +907,31 @@ async def create_partner_lead(
             digits = "258" + digits
         
         # Create appropriate message based on lead type
-        lead_type_label = "reserva" if payload.lead_type == models.LeadType.BOOKING.value else "pedido"
-        message_parts = [
-            f"O usuario {current_user.full_name} fez uma nova {lead_type_label} no Niassa Avanca!",
-            f"Empresa: {company.name}"
-        ]
-        
-        if payload.customer_name:
-            message_parts.append(f"Nome: {payload.customer_name}")
+        if payload.lead_type == models.LeadType.BOOKING.value:
+            lead_type_label = "reserva"
+            message_parts = [
+                f"O usuario {current_user.full_name} fez uma nova reserva no Niassa Avanca!",
+                f"Empresa: {company.name}"
+            ]
+            if payload.customer_name:
+                message_parts.append(f"Nome: {payload.customer_name}")
+        elif payload.lead_type == models.LeadType.CONTACT.value:
+            lead_type_label = "contacto"
+            message_parts = [
+                f"{current_user.full_name} quer entrar em contacto com {company.name} no Niassa Avanca!",
+            ]
+            if payload.customer_name:
+                message_parts.append(f"Nome: {payload.customer_name}")
+            if payload.customer_phone:
+                message_parts.append(f"Contacto: {payload.customer_phone}")
+        else:
+            lead_type_label = "pedido"
+            message_parts = [
+                f"O usuario {current_user.full_name} fez um novo pedido no Niassa Avanca!",
+                f"Empresa: {company.name}"
+            ]
+            if payload.customer_name:
+                message_parts.append(f"Nome: {payload.customer_name}")
         
         if payload.product_name:
             message_parts.append(f"Produto: {payload.product_name}")
