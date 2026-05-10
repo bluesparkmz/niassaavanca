@@ -915,17 +915,20 @@ async def create_partner_lead(
             ]
             if payload.customer_name:
                 message_parts.append(f"Nome: {payload.customer_name}")
+            
+            if payload.check_in_date and payload.check_out_date:
+                message_parts.append(f"Data: {payload.check_in_date} a {payload.check_out_date}")
+            if payload.guests_count:
+                message_parts.append(f"Hospedes: {payload.guests_count}")
+            if payload.customer_phone:
+                message_parts.append(f"Contacto: {payload.customer_phone}")
+            
+            message = ". ".join(message_parts)
         elif payload.lead_type == models.LeadType.CONTACT.value:
             lead_type_label = "contacto"
-            message_parts = [
-                f"{current_user.full_name} quer entrar em contacto com {company.name} no Niassa Avanca!",
-            ]
-            # Include phone from logged-in user profile
-            if current_user.phone:
-                message_parts.append(f"Contacto: {current_user.phone}")
-            # Also include customer phone if different
-            if payload.customer_phone and payload.customer_phone != current_user.phone:
-                message_parts.append(f"Telefone cliente: {payload.customer_phone}")
+            # Use the specified SMS template
+            contact_phone = current_user.phone or payload.customer_phone
+            message = f"Informamos que {current_user.full_name}. Apreciou seu produto no mercado digital NIASSA AVANÇA. Pelo contacto: {contact_phone}, agradeceríamos que lhe retorna-se para ter mais detalhes. Sempre ao seu dispor 24horas por dia"
         else:
             lead_type_label = "pedido"
             message_parts = [
@@ -934,23 +937,23 @@ async def create_partner_lead(
             ]
             if payload.customer_name:
                 message_parts.append(f"Nome: {payload.customer_name}")
-        
-        if payload.product_name:
-            message_parts.append(f"Produto: {payload.product_name}")
-        if payload.service_name:
-            message_parts.append(f"Servico: {payload.service_name}")
-        if payload.check_in_date and payload.check_out_date:
-            message_parts.append(f"Data: {payload.check_in_date} a {payload.check_out_date}")
-        if payload.guests_count:
-            message_parts.append(f"Hospedes: {payload.guests_count}")
-        if payload.quantity:
-            message_parts.append(f"Quantidade: {payload.quantity}")
-        if payload.customer_phone:
-            message_parts.append(f"Contacto: {payload.customer_phone}")
-        if payload.message:
-            message_parts.append(f"Mensagem: {payload.message[:100]}")
-        
-        message = ". ".join(message_parts)
+            
+            if payload.product_name:
+                message_parts.append(f"Produto: {payload.product_name}")
+            if payload.service_name:
+                message_parts.append(f"Servico: {payload.service_name}")
+            if payload.check_in_date and payload.check_out_date:
+                message_parts.append(f"Data: {payload.check_in_date} a {payload.check_out_date}")
+            if payload.guests_count:
+                message_parts.append(f"Hospedes: {payload.guests_count}")
+            if payload.quantity:
+                message_parts.append(f"Quantidade: {payload.quantity}")
+            if payload.customer_phone:
+                message_parts.append(f"Contacto: {payload.customer_phone}")
+            if payload.message:
+                message_parts.append(f"Mensagem: {payload.message[:100]}")
+            
+            message = ". ".join(message_parts)
         
         # Send SMS asynchronously (fire and forget)
         try:
