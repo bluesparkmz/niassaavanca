@@ -27,13 +27,24 @@ def _build_whatsapp_order_link(company: models.Company, product_name: str) -> st
 
 def _lodging_summary(profile: models.LodgingProfile) -> schemmas.LodgingSummary:
     company = profile.company
+    
+    # Get price from first active room if available, otherwise use profile price
+    price = profile.price_per_night
+    currency = profile.currency
+    
+    if profile.rooms:
+        active_rooms = [room for room in profile.rooms if room.active]
+        if active_rooms:
+            price = active_rooms[0].price_per_night
+            currency = active_rooms[0].currency
+    
     return schemmas.LodgingSummary(
         id=company.id,
         name=company.name,
         slug=company.slug,
         location=company.location,
-        price=profile.price_per_night,
-        currency=profile.currency,
+        price=price,
+        currency=currency,
         rating=profile.rating,
         image=company.cover_url or company.logo_url,
         badge=profile.badge,
@@ -248,7 +259,7 @@ def home(db: Session = Depends(get_db)):
     lodgings = (
         db.query(models.LodgingProfile)
         .join(models.Company)
-        .options(joinedload(models.LodgingProfile.company))
+        .options(joinedload(models.LodgingProfile.company), joinedload(models.LodgingProfile.rooms))
         .filter(
             models.LodgingProfile.active == True,
             # models.Company.status == models.CompanyStatus.APPROVED,
@@ -306,7 +317,7 @@ def list_lodgings(db: Session = Depends(get_db)):
     items = (
         db.query(models.LodgingProfile)
         .join(models.Company)
-        .options(joinedload(models.LodgingProfile.company))
+        .options(joinedload(models.LodgingProfile.company), joinedload(models.LodgingProfile.rooms))
         .filter(models.LodgingProfile.active == True)
         .order_by(models.Company.is_featured.desc(), models.LodgingProfile.rating.desc())
         .all()
