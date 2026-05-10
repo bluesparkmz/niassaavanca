@@ -920,10 +920,12 @@ async def create_partner_lead(
             message_parts = [
                 f"{current_user.full_name} quer entrar em contacto com {company.name} no Niassa Avanca!",
             ]
-            if payload.customer_name:
-                message_parts.append(f"Nome: {payload.customer_name}")
-            if payload.customer_phone:
-                message_parts.append(f"Contacto: {payload.customer_phone}")
+            # Include phone from logged-in user profile
+            if current_user.phone:
+                message_parts.append(f"Contacto: {current_user.phone}")
+            # Also include customer phone if different
+            if payload.customer_phone and payload.customer_phone != current_user.phone:
+                message_parts.append(f"Telefone cliente: {payload.customer_phone}")
         else:
             lead_type_label = "pedido"
             message_parts = [
