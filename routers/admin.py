@@ -377,7 +377,8 @@ def admin_company_detail(
             joinedload(models.Company.producer_profile).selectinload(models.ProducerProfile.products),
             joinedload(models.Company.restaurant_profile).selectinload(models.RestaurantProfile.menu_items),
             joinedload(models.Company.lodging_profile)
-            .selectinload(models.LodgingProfile.rooms)
+            .selectinload(models.LodgingProfile.rooms),
+            joinedload(models.Company.lodging_profile)
             .selectinload(models.LodgingProfile.conference_rooms),
         )
         .filter(models.Company.id == company_id)
