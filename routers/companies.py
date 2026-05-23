@@ -609,7 +609,7 @@ def list_conference_rooms(
             name=r.name,
             room_type=r.room_type,
             capacity=r.capacity,
-            price_per_day=str(r.price_per_day) if r.price_per_day else None,
+            price_per_day=r.price_per_day,
             currency=r.currency,
             total_units=r.total_units,
             amenities=r.amenities or [],
