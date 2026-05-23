@@ -685,8 +685,8 @@ def update_conference_room(
         room.room_type = payload.room_type
     if payload.capacity is not None:
         room.capacity = payload.capacity
-    if payload.price_per_hour is not None:
-        room.price_per_hour = payload.price_per_hour
+    if payload.price_per_day is not None:
+        room.price_per_day = payload.price_per_day
     if payload.currency is not None:
         room.currency = payload.currency
     if payload.total_units is not None:

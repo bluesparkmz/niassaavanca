@@ -564,6 +564,7 @@ class LodgingDetail(LodgingSummary):
     check_in_time: Optional[str] = None
     check_out_time: Optional[str] = None
     rooms: List["LodgingRoomOut"] = []
+    conference_rooms: List["ConferenceRoomOut"] = []
     services: List["CompanyServiceOut"] = []
 
 

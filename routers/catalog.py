@@ -134,6 +134,22 @@ def _lodging_room_out(item: models.LodgingRoom) -> schemmas.LodgingRoomOut:
     )
 
 
+def _conference_room_out(item: models.ConferenceRoom) -> schemmas.ConferenceRoomOut:
+    return schemmas.ConferenceRoomOut(
+        id=item.id,
+        name=item.name,
+        room_type=item.room_type,
+        capacity=item.capacity,
+        price_per_day=item.price_per_day,
+        currency=item.currency,
+        total_units=item.total_units,
+        amenities=list(item.amenities or []),
+        images=list(item.images or []),
+        short_description=item.short_description,
+        active=item.active,
+    )
+
+
 def _favorite_out(item: models.Favorite) -> schemmas.FavoriteOut:
     return schemmas.FavoriteOut(
         id=item.id,
@@ -333,7 +349,11 @@ def get_lodging(slug: str, db: Session = Depends(get_db)):
     item = (
         db.query(models.LodgingProfile)
         .join(models.Company)
-        .options(joinedload(models.LodgingProfile.company))
+        .options(
+            joinedload(models.LodgingProfile.company),
+            joinedload(models.LodgingProfile.rooms),
+            joinedload(models.LodgingProfile.conference_rooms),
+        )
         .filter(models.Company.slug == slug)
         .first()
     )
@@ -354,6 +374,7 @@ def get_lodging(slug: str, db: Session = Depends(get_db)):
         check_in_time=item.check_in_time,
         check_out_time=item.check_out_time,
         rooms=[_lodging_room_out(room) for room in item.rooms if room.active],
+        conference_rooms=[_conference_room_out(room) for room in item.conference_rooms if room.active],
         services=services,
     )
 
