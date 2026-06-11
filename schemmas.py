@@ -328,10 +328,10 @@ class LodgingRoomOut(BaseModel):
 class ConferenceRoomIn(BaseModel):
     name: str = Field(..., min_length=2, max_length=180)
     room_type: Optional[str] = Field(default=None, max_length=80)
-    capacity: int = Field(default=1, ge=1, le=50)
+    capacity: int = Field(default=1, ge=1, le=500)
     price_per_day: Decimal = Field(default=0)
     currency: str = Field(default="MZN", max_length=10)
-    total_units: int = Field(default=1, ge=1, le=100)
+    total_units: int = Field(default=1, ge=1, le=1000)
     amenities: List[str] = Field(default_factory=list)
     images: List[str] = Field(default_factory=list)
     short_description: Optional[str] = Field(default=None, max_length=255)
@@ -340,10 +340,10 @@ class ConferenceRoomIn(BaseModel):
 class ConferenceRoomUpdate(BaseModel):
     name: Optional[str] = Field(default=None, min_length=2, max_length=180)
     room_type: Optional[str] = Field(default=None, max_length=80)
-    capacity: Optional[int] = Field(default=None, ge=1, le=50)
+    capacity: Optional[int] = Field(default=None, ge=1, le=500)
     price_per_day: Optional[Decimal] = None
     currency: Optional[str] = Field(default=None, max_length=10)
-    total_units: Optional[int] = Field(default=None, ge=1, le=100)
+    total_units: Optional[int] = Field(default=None, ge=1, le=1000)
     amenities: Optional[List[str]] = None
     images: Optional[List[str]] = None
     short_description: Optional[str] = Field(default=None, max_length=255)

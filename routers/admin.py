@@ -5,6 +5,7 @@ import secrets
 from fastapi import APIRouter, Depends, File, HTTPException, status, UploadFile, Body
 from pydantic import BaseModel, Field
 from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload, selectinload, defaultload
 
 import models
@@ -930,7 +931,11 @@ def admin_create_room(
         active=True,
     )
     db.add(room)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="Ja existe uma sala de conferencia com este nome")
     db.refresh(room)
     return _lodging_room_out(room)
 
@@ -960,7 +965,11 @@ def admin_update_room(
     for key, value in data.items():
         setattr(room, key, value)
 
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="Ja existe uma sala de conferencia com este nome")
     db.refresh(room)
     return _lodging_room_out(room)
 
@@ -1114,7 +1123,11 @@ def admin_create_conference_room(
         active=True,
     )
     db.add(room)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="Ja existe uma sala de conferencia com este nome")
     db.refresh(room)
     return schemmas.ConferenceRoomOut(
         id=room.id,
@@ -1171,7 +1184,11 @@ def admin_update_conference_room(
     if payload.active is not None:
         room.active = payload.active
 
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="Ja existe uma sala de conferencia com este nome")
     db.refresh(room)
     return schemmas.ConferenceRoomOut(
         id=room.id,
