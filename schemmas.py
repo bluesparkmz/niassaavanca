@@ -566,6 +566,10 @@ class LodgingDetail(LodgingSummary):
     rooms: List["LodgingRoomOut"] = []
     conference_rooms: List["ConferenceRoomOut"] = []
     services: List["CompanyServiceOut"] = []
+    supports_restaurant: bool = False
+    restaurant_cuisine: Optional[str] = None
+    restaurant_signature: Optional[str] = None
+    restaurant_menu: List["RestaurantMenuItem"] = []
 
 
 class ExperienceSummary(BaseModel):

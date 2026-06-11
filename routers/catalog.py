@@ -352,6 +352,7 @@ def get_lodging(slug: str, db: Session = Depends(get_db)):
         .join(models.Company)
         .options(
             joinedload(models.LodgingProfile.company),
+            joinedload(models.LodgingProfile.company).joinedload(models.Company.restaurant_profile),
             joinedload(models.LodgingProfile.rooms),
             joinedload(models.LodgingProfile.conference_rooms),
         )
@@ -362,6 +363,10 @@ def get_lodging(slug: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Alojamento nao encontrado")
     summary = _lodging_summary(item)
     services = [_service_out(service) for service in item.company.services if service.active]
+    restaurant_profile = item.company.restaurant_profile
+    restaurant_menu = []
+    if restaurant_profile and restaurant_profile.active:
+        restaurant_menu = [schemmas.RestaurantMenuItem(**entry) for entry in (restaurant_profile.menu_items or [])]
     return schemmas.LodgingDetail(
         **summary.model_dump(),
         description=item.company.description,
@@ -377,6 +382,10 @@ def get_lodging(slug: str, db: Session = Depends(get_db)):
         rooms=[_lodging_room_out(room) for room in item.rooms if room.active],
         conference_rooms=[_conference_room_out(room) for room in item.conference_rooms if room.active],
         services=services,
+        supports_restaurant=bool(restaurant_profile and restaurant_profile.active),
+        restaurant_cuisine=restaurant_profile.cuisine if restaurant_profile and restaurant_profile.active else None,
+        restaurant_signature=restaurant_profile.signature if restaurant_profile and restaurant_profile.active else None,
+        restaurant_menu=restaurant_menu,
     )
 
 
