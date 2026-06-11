@@ -1074,7 +1074,7 @@ def admin_list_conference_rooms(
             name=r.name,
             room_type=r.room_type,
             capacity=r.capacity,
-            price_per_day=str(r.price_per_day) if r.price_per_day else None,
+            price_per_day=r.price_per_day,
             currency=r.currency,
             total_units=r.total_units,
             amenities=r.amenities or [],
@@ -1121,7 +1121,7 @@ def admin_create_conference_room(
         name=room.name,
         room_type=room.room_type,
         capacity=room.capacity,
-        price_per_day=str(room.price_per_day) if room.price_per_day else None,
+        price_per_day=room.price_per_day,
         currency=room.currency,
         total_units=room.total_units,
         amenities=room.amenities or [],
@@ -1156,8 +1156,8 @@ def admin_update_conference_room(
         room.room_type = payload.room_type
     if payload.capacity is not None:
         room.capacity = payload.capacity
-    if payload.price_per_hour is not None:
-        room.price_per_hour = payload.price_per_hour
+    if payload.price_per_day is not None:
+        room.price_per_day = payload.price_per_day
     if payload.currency is not None:
         room.currency = payload.currency
     if payload.total_units is not None:
@@ -1178,7 +1178,7 @@ def admin_update_conference_room(
         name=room.name,
         room_type=room.room_type,
         capacity=room.capacity,
-        price_per_day=str(room.price_per_day) if room.price_per_day else None,
+        price_per_day=room.price_per_day,
         currency=room.currency,
         total_units=room.total_units,
         amenities=room.amenities or [],
