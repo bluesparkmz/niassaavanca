@@ -548,11 +548,7 @@ def create_lodging_room(
         active=True,
     )
     db.add(room)
-    try:
-        db.commit()
-    except IntegrityError:
-        db.rollback()
-        raise HTTPException(status_code=400, detail="Ja existe uma sala de conferencia com este nome")
+    db.commit()
     db.refresh(room)
     return _lodging_room_out(room)
 
@@ -573,11 +569,7 @@ def update_lodging_room(
         raise HTTPException(status_code=404, detail="Quarto nao encontrado")
     for key, value in payload.model_dump(exclude_unset=True).items():
         setattr(room, key, value)
-    try:
-        db.commit()
-    except IntegrityError:
-        db.rollback()
-        raise HTTPException(status_code=400, detail="Ja existe uma sala de conferencia com este nome")
+    db.commit()
     db.refresh(room)
     return _lodging_room_out(room)
 
@@ -655,11 +647,7 @@ def create_conference_room(
         active=True,
     )
     db.add(room)
-    try:
-        db.commit()
-    except IntegrityError:
-        db.rollback()
-        raise HTTPException(status_code=400, detail="Ja existe uma sala de conferencia com este nome")
+    db.commit()
     db.refresh(room)
     return schemmas.ConferenceRoomOut(
         id=room.id,
@@ -713,11 +701,7 @@ def update_conference_room(
     if payload.active is not None:
         room.active = payload.active
 
-    try:
-        db.commit()
-    except IntegrityError:
-        db.rollback()
-        raise HTTPException(status_code=400, detail="Ja existe uma sala de conferencia com este nome")
+    db.commit()
     db.refresh(room)
     return schemmas.ConferenceRoomOut(
         id=room.id,

@@ -298,9 +298,6 @@ class ProducerProduct(Base):
 
 class LodgingRoom(Base):
     __tablename__ = "lodging_rooms"
-    __table_args__ = (
-        UniqueConstraint("lodging_profile_id", "name", name="uq_lodging_room_name"),
-    )
 
     id = Column(Integer, primary_key=True, index=True)
     lodging_profile_id = Column(Integer, ForeignKey("lodging_profiles.id", ondelete="CASCADE"), nullable=False, index=True)
@@ -325,9 +322,6 @@ class LodgingRoom(Base):
 
 class ConferenceRoom(Base):
     __tablename__ = "conference_rooms"
-    __table_args__ = (
-        UniqueConstraint("lodging_profile_id", "name", name="uq_conference_room_name"),
-    )
 
     id = Column(Integer, primary_key=True, index=True)
     lodging_profile_id = Column(Integer, ForeignKey("lodging_profiles.id", ondelete="CASCADE"), nullable=False, index=True)
