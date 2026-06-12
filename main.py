@@ -136,5 +136,14 @@ def _ensure_admin_user() -> None:
 @app.on_event("startup")
 def startup() -> None:
     init_db()
+    
+    # Run Alembic migrations
+    from alembic.config import Config
+    from alembic import command
+    import os
+    alembic_cfg = Config("alembic.ini")
+    alembic_cfg.set_main_option("sqlalchemy.url", os.getenv("DATABASE_URL", "postgresql://user:password@localhost/db"))
+    command.upgrade(alembic_cfg, "head")
+    
     _ensure_admin_user()
 
