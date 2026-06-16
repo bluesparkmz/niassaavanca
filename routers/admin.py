@@ -5,12 +5,11 @@ import secrets
 from fastapi import APIRouter, Depends, File, HTTPException, status, UploadFile, Body
 from pydantic import BaseModel, Field
 from sqlalchemy import func
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload, selectinload, defaultload
 import logging
 import traceback
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(__name__) 
 
 import models
 import schemmas
