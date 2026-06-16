@@ -7,6 +7,10 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload, selectinload, defaultload
+import logging
+import traceback
+
+logger = logging.getLogger(__name__)
 
 import models
 import schemmas
@@ -1087,107 +1091,82 @@ def admin_list_conference_rooms(
     ]
 
 
-@router.post("/companies/{company_id}/conference-rooms", response_model=schemmas.ConferenceRoomOut)
+@router.post(
+    "/companies/{company_id}/conference-rooms",
+    response_model=schemmas.ConferenceRoomOut
+)
 def admin_create_conference_room(
     company_id: int,
     payload: schemmas.ConferenceRoomIn,
     db: Session = Depends(get_db),
     _: models.User = Depends(_require_admin),
 ):
-    """Create a conference room for a company - admin only"""
-    company = db.query(models.Company).filter(models.Company.id == company_id).first()
-    if not company:
-        raise HTTPException(status_code=404, detail="Empresa nao encontrada")
-    if not company.lodging_profile:
-        raise HTTPException(status_code=400, detail="Empresa nao tem perfil de alojamento")
+    try:
+        company = (
+            db.query(models.Company)
+            .filter(models.Company.id == company_id)
+            .first()
+        )
 
-    room = models.ConferenceRoom(
-        lodging_profile_id=company.lodging_profile.id,
-        name=payload.name.strip(),
-        room_type=payload.room_type,
-        capacity=payload.capacity,
-        price_per_day=payload.price_per_day,
-        currency=payload.currency or "MZN",
-        total_units=payload.total_units,
-        amenities=payload.amenities,
-        images=payload.images,
-        short_description=payload.short_description,
-        active=True,
-    )
-    db.add(room)
-    db.commit()
-    db.refresh(room)
-    return schemmas.ConferenceRoomOut(
-        id=room.id,
-        name=room.name,
-        room_type=room.room_type,
-        capacity=room.capacity,
-        price_per_day=room.price_per_day,
-        currency=room.currency,
-        total_units=room.total_units,
-        amenities=room.amenities or [],
-        images=room.images or [],
-        short_description=room.short_description,
-        active=room.active,
-    )
+        if not company:
+            raise HTTPException(
+                status_code=404,
+                detail="Empresa nao encontrada"
+            )
 
+        if not company.lodging_profile:
+            raise HTTPException(
+                status_code=400,
+                detail="Empresa nao tem perfil de alojamento"
+            )
 
-@router.patch("/companies/{company_id}/conference-rooms/{room_id}", response_model=schemmas.ConferenceRoomOut)
-def admin_update_conference_room(
-    company_id: int,
-    room_id: int,
-    payload: schemmas.ConferenceRoomUpdate,
-    db: Session = Depends(get_db),
-    _: models.User = Depends(_require_admin),
-):
-    """Update a conference room for a company - admin only"""
-    company = db.query(models.Company).filter(models.Company.id == company_id).first()
-    if not company:
-        raise HTTPException(status_code=404, detail="Empresa nao encontrada")
-    if not company.lodging_profile:
-        raise HTTPException(status_code=400, detail="Empresa nao tem perfil de alojamento")
+        room = models.ConferenceRoom(
+            lodging_profile_id=company.lodging_profile.id,
+            name=payload.name.strip(),
+            room_type=payload.room_type,
+            capacity=payload.capacity,
+            price_per_day=payload.price_per_day,
+            currency=payload.currency or "MZN",
+            total_units=payload.total_units,
+            amenities=payload.amenities,
+            images=payload.images,
+            short_description=payload.short_description,
+            active=True,
+        )
 
-    room = next((item for item in company.lodging_profile.conference_rooms if item.id == room_id), None)
-    if not room:
-        raise HTTPException(status_code=404, detail="Sala de conferência nao encontrada")
+        db.add(room)
+        db.commit()
+        db.refresh(room)
 
-    if payload.name is not None:
-        room.name = payload.name.strip()
-    if payload.room_type is not None:
-        room.room_type = payload.room_type
-    if payload.capacity is not None:
-        room.capacity = payload.capacity
-    if payload.price_per_day is not None:
-        room.price_per_day = payload.price_per_day
-    if payload.currency is not None:
-        room.currency = payload.currency
-    if payload.total_units is not None:
-        room.total_units = payload.total_units
-    if payload.amenities is not None:
-        room.amenities = payload.amenities
-    if payload.images is not None:
-        room.images = payload.images
-    if payload.short_description is not None:
-        room.short_description = payload.short_description
-    if payload.active is not None:
-        room.active = payload.active
+        return schemmas.ConferenceRoomOut(
+            id=room.id,
+            name=room.name,
+            room_type=room.room_type,
+            capacity=room.capacity,
+            price_per_day=room.price_per_day,
+            currency=room.currency,
+            total_units=room.total_units,
+            amenities=room.amenities or [],
+            images=room.images or [],
+            short_description=room.short_description,
+            active=room.active,
+        )
 
-    db.commit()
-    db.refresh(room)
-    return schemmas.ConferenceRoomOut(
-        id=room.id,
-        name=room.name,
-        room_type=room.room_type,
-        capacity=room.capacity,
-        price_per_day=room.price_per_day,
-        currency=room.currency,
-        total_units=room.total_units,
-        amenities=room.amenities or [],
-        images=room.images or [],
-        short_description=room.short_description,
-        active=room.active,
-    )
+    except HTTPException:
+        raise
 
+    except Exception as e:
+        db.rollback()
+
+        logger.error(
+            "Erro ao criar sala de conferencia:\n%s",
+            traceback.format_exc()
+        )
+
+        raise HTTPException(
+            status_code=500,
+            detail=f"Erro interno: {str(e)}"
+        )
 
 @router.delete("/companies/{company_id}/conference-rooms/{room_id}")
 def admin_delete_conference_room(
